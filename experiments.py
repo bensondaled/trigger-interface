@@ -1,4 +1,4 @@
-import pyDAQmx as pydaq
+import PyDAQmx as pydaq
 import numpy as np 
 import cv2
 import cv2.cv as cv
@@ -8,13 +8,32 @@ import json
 import matplotlib.cm as mpl_cm
 from matplotlib import path as mpl_path
 import matplotlib.animation as ani
-pl.ion()
 
 BW = 0
 COLOR = 1
 
 NP = 0
 CV = 1
+
+class Playback(object):
+	def __init__(self, filename):
+		try:
+			self.imgs = np.load(filename)
+		except:
+			print "No file found for playback."
+			self.imgs = None
+		
+	def play(self):
+		if self.imgs == None:
+			return
+		imgs = np.split(self.imgs,np.shape(self.imgs)[0],axis=0)
+		imgs = [np.squeeze(i) for i in imgs]
+
+		fig=pl.figure()
+		ims = [[pl.imshow(i, cmap=mpl_cm.Greys_r)] for i in imgs]
+
+		anim = ani.ArtistAnimation(fig, ims, interval=50., repeat=True)
+		pl.show()
 
 class Trigger(object):
 	def __init__(self, msg=[], duration=1.0):
@@ -38,15 +57,22 @@ class Trigger(object):
 class DAQ(object):
 	def __init__(self, port="Dev1/Port1/Line0:3"):
 		self.port = port
-		self.task = pydaq.TaskHandle()
-		pydaq.DAQmxCreateTask("", pydaq.byref(self.task))
-		pydaq.DAQmxCreateDOChan(self.task, self.port, "OutputOnly", pydaq.DAQmx_Val_ChanForAllLines)
-		pydaq.DAQmxStartTask(self.task)
+		try:
+			self.task = pydaq.TaskHandle()
+			pydaq.DAQmxCreateTask("", pydaq.byref(self.task))
+			pydaq.DAQmxCreateDOChan(self.task, self.port, "OutputOnly", pydaq.DAQmx_Val_ChanForAllLines)
+			pydaq.DAQmxStartTask(self.task)
+		except:
+			self.task = None
 	def trigger(self, trig):
-		DAQmxWriteDigitalLines(self.task,1,1,10.0,pydaq.DAQmx_Val_GroupByChannel,trig.msg,None,None)
+		if self.task:
+			DAQmxWriteDigitalLines(self.task,1,1,10.0,pydaq.DAQmx_Val_GroupByChannel,trig.msg,None,None)
+		else:
+			print "DAQ task not functional. Attempted to write %s."%str(trig.msg)
 	def release(self):
-		pydaq.DAQmxStopTask(self.task)
-        pydaq.DAQmxClearTask(self.task)
+		if self.task:
+			pydaq.DAQmxStopTask(self.task)
+			pydaq.DAQmxClearTask(self.task)
 		
 	def metadata(self):
 		md = {}
@@ -82,7 +108,7 @@ class Camera(object):
 		
 		return md
 class Experiment(object):
-	def __init__(self, cameras=None, daq=None, save_mode=NP, mask_names=('WHEEL','EYE'), monitor_cam_idx=0, motion_mask='WHEEL', movement_query_frames=20, movement_std_thresh=40, trigger=None):
+	def __init__(self, cameras=None, daq=None, save_mode=NP, mask_names=('WHEEL','EYE'), monitor_cam_idx=0, motion_mask='WHEEL', movement_query_frames=20, movement_std_thresh=5, trigger=None, inter_trial_min=5.0):
 		"""
 		Parameters:
 			cameras: [list of] Camera object[s]
@@ -107,6 +133,7 @@ class Experiment(object):
 		
 		self.save_mode = save_mode
 		self.img_sets = [self.empty_img_set(i) for i,cam in enumerate(self.cameras)]
+		self.monitor_img_sets = [self.empty_img_set(i) for i,cam in enumerate(self.cameras)]
 				
 		self.mask_names = mask_names
 		self.masks = {}
@@ -120,8 +147,12 @@ class Experiment(object):
 		self.movement_query_frames = movement_query_frames
 		
 		self.trigger = trigger
+		self.inter_trial_min = inter_trial_min
 		
 		self.TRIAL_ON = False
+		self.last_trial_off = time.time()
+		
+		self.writers = []
 	def metadata(self):
 		md = {}
 		md['movement_std_thresh'] = self.movement_std_thresh
@@ -156,7 +187,7 @@ class Experiment(object):
 		f.close()
 		
 	def empty_img_set(self, cam_idx):
-		return np.empty(self.cameras[cam_idx].resolution[::-1])
+		return np.array([np.empty(self.cameras[cam_idx].resolution[::-1])])
 	def make_mask(self, cam_idx):
 		frame = self.cameras[cam_idx].read()
 		pl.imshow(frame, cmap=mpl_cm.Greys_r)
@@ -183,7 +214,7 @@ class Experiment(object):
 		elif self.save_mode == NP:
 			for cam_idx in range(len(self.cameras)):
 				np.save(self.run_name+'-cam%i-trial%i'%(cam_idx,self.trial_count), self.img_sets[cam_idx])
-				self.img_sets[cam_idx] = empty_img_set(cam_idx)
+				self.img_sets[cam_idx] = self.empty_img_set(cam_idx)
 	def make_windows(self):
 		windows = [str(i) for i in range(len(self.cameras))]
 		for w in windows:
@@ -198,10 +229,11 @@ class Experiment(object):
 			[writer.release() for writer in self.writers]
 		self.daq.release()
 	def query_for_trigger(self):
-		frames = self.img_sets[self.monitor_cam_idx][-self.movement_query_frames:] #[:,:,-self.movement_query_frames:]
+		if time.time()-self.last_trial_off < self.inter_trial_min:
+			return False
 		#method 1:
 		mask_idxs = self.mask_idxs[self.motion_mask]
-		std_pts = np.std(frames[:,mask_idxs[0],mask_idxs[1]], axis=0)
+		std_pts = np.std(self.monitor_img_sets[self.monitor_cam_idx][:,mask_idxs[0],mask_idxs[1]], axis=0)
 		return np.mean(std_pts) < self.movement_std_thresh
 		
 		#could also try multiplying frames by the mask (not mask_idxs)
@@ -210,14 +242,18 @@ class Experiment(object):
 	def next_frame(self):
 		for cam_idx,win,cam in zip(range(len(self.cameras)),self.windows,self.cameras):
 			frame = cam.read()
-			self.img_sets[cam_idx] = np.append(self.img_sets[cam_idx], [frame], axis=0) #np.dstack((self.img_sets[cam_idx],frame))
 
-			if self.save_mode == CV:	self.save(cam_idx, frame)
-			if not self.TRIAL_ON:
+			if self.TRIAL_ON:
+				self.img_sets[cam_idx] = np.append(self.img_sets[cam_idx], [frame], axis=0)
+			elif not self.TRIAL_ON:
+				if self.save_mode == CV:	self.save(cam_idx, frame)
+				self.monitor_img_sets[cam_idx] = np.append(self.monitor_img_sets[cam_idx], [frame], axis=0)
+				if np.shape(self.monitor_img_sets[cam_idx])[0]>self.movement_query_frames:
+					self.monitor_img_sets[cam_idx] = self.monitor_img_sets[cam_idx][-self.movement_query_frames:]
 				cv2.imshow(win, frame)
-	def run(self):
+	def run(self, **kwargs):
 		# preparations for new run
-		self.new_run()
+		self.new_run(**kwargs)
 		
 		# run first few frames before any checking
 		for i in range(self.movement_query_frames):
@@ -230,6 +266,7 @@ class Experiment(object):
 			if self.TRIAL_ON:
 				if time.time()-self.TRIAL_ON >= self.trigger.duration:
 					self.TRIAL_ON = False
+					self.last_trial_off = time.time()
 					if self.save_mode == NP:	self.save()
 					self.trial_count += 1
 			
@@ -241,6 +278,7 @@ class Experiment(object):
 				if self.query_for_trigger():
 					self.daq.trigger(self.trigger)
 					self.TRIAL_ON = time.time()
+					self.monitor_img_sets[self.monitor_cam_idx] = self.empty_img_set(self.monitor_cam_idx)
 		
 	
 if __name__=='__main__':
@@ -248,10 +286,10 @@ if __name__=='__main__':
 	behaviour_cam = Camera(idx=1, resolution=(160, 120), frame_rate=10, color_mode=BW)
 	trigger = Trigger(msg=[0,0,1,1], duration=5.0)
 	
-	exp = Experiment(cameras=[monitor_cam, behaviour_cam], monitor_cam_idx=0, save_mode=NP, trigger=trigger)
+	exp = Experiment(cameras=[monitor_cam], daq=DAQ(), monitor_cam_idx=0, save_mode=NP, trigger=trigger)
 	
-	#exp.run(new_masks=True)
-	#exp.end()
+	exp.run(new_masks=True)
+	exp.end()
 
 
 
