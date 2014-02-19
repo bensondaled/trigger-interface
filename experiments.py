@@ -1,5 +1,7 @@
-import PyDAQmx as pydaq
+#import PyDAQmx as pydaq
+import csv as pydaq
 import numpy as np 
+import os
 import cv2
 import cv2.cv as cv
 import time
@@ -23,7 +25,8 @@ class Playback(object):
 			print "No file found for playback."
 			self.imgs = None
 		
-	def play(self):
+	def play(self, fps=3.):
+		pl.ioff()
 		if self.imgs == None:
 			return
 		imgs = np.split(self.imgs,np.shape(self.imgs)[0],axis=0)
@@ -32,7 +35,7 @@ class Playback(object):
 		fig=pl.figure()
 		ims = [[pl.imshow(i, cmap=mpl_cm.Greys_r)] for i in imgs]
 
-		anim = ani.ArtistAnimation(fig, ims, interval=50., repeat=True)
+		anim = ani.ArtistAnimation(fig, ims, interval=1./(fps/1000.), repeat=True)
 		pl.show()
 
 class Trigger(object):
@@ -108,7 +111,7 @@ class Camera(object):
 		
 		return md
 class Experiment(object):
-	def __init__(self, cameras=None, daq=None, save_mode=NP, mask_names=('WHEEL','EYE'), monitor_cam_idx=0, motion_mask='WHEEL', movement_query_frames=20, movement_std_thresh=5, trigger=None, inter_trial_min=5.0):
+	def __init__(self, cameras=None, daq=None, save_mode=NP, mask_names=('WHEEL','EYE'), monitor_cam_idx=0, motion_mask='WHEEL', movement_query_frames=20, movement_std_thresh=1.0, trigger=None, inter_trial_min=5.0):
 		"""
 		Parameters:
 			cameras: [list of] Camera object[s]
@@ -152,6 +155,8 @@ class Experiment(object):
 		self.TRIAL_ON = False
 		self.last_trial_off = time.time()
 		
+		self.run_info = self.empty_run_info()
+		
 		self.writers = []
 	def metadata(self):
 		md = {}
@@ -161,11 +166,19 @@ class Experiment(object):
 		md['monitor_cam_idx'] = self.monitor_cam_idx
 		
 		return md
+	def empty_run_info(self):
+		runinf = {}
+		runinf['trigger_times'] = []
+		return runinf
 	def new_run(self, new_masks=False):		
 		if new_masks or len(self.masks)==0:	
 			self.set_masks()
 		
 		self.run_name = time.strftime("%Y%m%d_%H%M%S")
+		
+		self.run_info = self.empty_run_info()
+		os.mkdir(self.run_name)
+		os.chdir(self.run_name)
 		
 		if self.save_mode == CV:
 			[writer.release() for writer in self.writers]
@@ -185,7 +198,11 @@ class Experiment(object):
 		f = open("%s-metadata.json"%self.run_name, 'w')
 		f.write("%s"%json.dumps(dic))
 		f.close()
-		
+	def end_run(self):
+		f = open("%s-data.json"%self.run_name, 'w')
+		f.write("%s"%json.dumps(self.run_info))
+		f.close()
+		os.chdir('..')
 	def empty_img_set(self, cam_idx):
 		return np.array([np.empty(self.cameras[cam_idx].resolution[::-1])])
 	def make_mask(self, cam_idx):
@@ -251,6 +268,9 @@ class Experiment(object):
 				if np.shape(self.monitor_img_sets[cam_idx])[0]>self.movement_query_frames:
 					self.monitor_img_sets[cam_idx] = self.monitor_img_sets[cam_idx][-self.movement_query_frames:]
 				cv2.imshow(win, frame)
+	def trigger(self):
+		self.daq.trigger(self.trigger)
+		self.run_info['trigger_times'].append(time.time())
 	def run(self, **kwargs):
 		# preparations for new run
 		self.new_run(**kwargs)
@@ -276,9 +296,11 @@ class Experiment(object):
 					break
 					
 				if self.query_for_trigger():
-					self.daq.trigger(self.trigger)
+					self.trigger()
 					self.TRIAL_ON = time.time()
 					self.monitor_img_sets[self.monitor_cam_idx] = self.empty_img_set(self.monitor_cam_idx)
+					
+		self.end_run()
 		
 	
 if __name__=='__main__':
