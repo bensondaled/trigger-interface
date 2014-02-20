@@ -268,7 +268,7 @@ class Experiment(object):
 				if np.shape(self.monitor_img_sets[cam_idx])[0]>self.movement_query_frames:
 					self.monitor_img_sets[cam_idx] = self.monitor_img_sets[cam_idx][-self.movement_query_frames:]
 				cv2.imshow(win, frame)
-	def trigger(self):
+	def send_trigger(self):
 		self.daq.trigger(self.trigger)
 		self.run_info['trigger_times'].append(time.time())
 	def run(self, **kwargs):
@@ -296,9 +296,9 @@ class Experiment(object):
 					break
 					
 				if self.query_for_trigger():
-					self.trigger()
-					self.TRIAL_ON = time.time()
 					self.monitor_img_sets[self.monitor_cam_idx] = self.empty_img_set(self.monitor_cam_idx)
+					self.send_trigger()
+					self.TRIAL_ON = time.time()
 					
 		self.end_run()
 		
