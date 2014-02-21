@@ -1,115 +1,19 @@
-#import PyDAQmx as pydaq
-import csv as pydaq
 import numpy as np 
 import os
 import cv2
-import cv2.cv as cv
+cv = cv2.cv
 import time
 import pylab as pl
 import json
 import matplotlib.cm as mpl_cm
 from matplotlib import path as mpl_path
 import matplotlib.animation as ani
-
-BW = 0
-COLOR = 1
+from daq import DAQ, Trigger
+from cameras import Camera
 
 NP = 0
 CV = 1
 
-class Playback(object):
-	def __init__(self, filename):
-		try:
-			self.imgs = np.load(filename)
-		except:
-			print "No file found for playback."
-			self.imgs = None
-		
-	def play(self, fps=3.):
-		pl.ioff()
-		if self.imgs == None:
-			return
-		imgs = np.split(self.imgs,np.shape(self.imgs)[0],axis=0)
-		imgs = [np.squeeze(i) for i in imgs]
-
-		fig=pl.figure()
-		ims = [[pl.imshow(i, cmap=mpl_cm.Greys_r)] for i in imgs]
-
-		anim = ani.ArtistAnimation(fig, ims, interval=1./(fps/1000.), repeat=True)
-		pl.show()
-
-class Trigger(object):
-	def __init__(self, msg=[], duration=1.0):
-		self.duration = duration
-		self._msg = None
-		self.msg = msg
-	
-	@property
-	def msg(self):
-		return self._msg
-	@msg.setter
-	def msg(self, msg):
-		self._msg = np.array(msg).astype(np.uint8)
-		
-	def metadata(self):
-		md = {}
-		md['duration'] = self.duration
-		md['msg'] = str(self.msg)
-		
-		return md
-class DAQ(object):
-	def __init__(self, port="Dev1/Port1/Line0:3"):
-		self.port = port
-		try:
-			self.task = pydaq.TaskHandle()
-			pydaq.DAQmxCreateTask("", pydaq.byref(self.task))
-			pydaq.DAQmxCreateDOChan(self.task, self.port, "OutputOnly", pydaq.DAQmx_Val_ChanForAllLines)
-			pydaq.DAQmxStartTask(self.task)
-		except:
-			self.task = None
-	def trigger(self, trig):
-		if self.task:
-			DAQmxWriteDigitalLines(self.task,1,1,10.0,pydaq.DAQmx_Val_GroupByChannel,trig.msg,None,None)
-		else:
-			print "DAQ task not functional. Attempted to write %s."%str(trig.msg)
-	def release(self):
-		if self.task:
-			pydaq.DAQmxStopTask(self.task)
-			pydaq.DAQmxClearTask(self.task)
-		
-	def metadata(self):
-		md = {}
-		md['port'] = self.port
-		
-		return md
-class Camera(object):
-	def __init__(self, idx=0, resolution=(320,240), frame_rate=50, color_mode=BW):
-		self.resolution = resolution
-		self.frame_rate = frame_rate
-		self.color_mode = color_mode
-		
-		self.vc = cv2.VideoCapture(idx)
-
-		self.vc.set(cv.CV_CAP_PROP_FPS, self.frame_rate)
-		self.vc.set(cv.CV_CAP_PROP_FRAME_WIDTH, self.resolution[0])
-		self.vc.set(cv.CV_CAP_PROP_FRAME_HEIGHT, self.resolution[1])
-			
-		time.sleep(0.1)
-		self.vc.read()
-	def read(self):
-		success,frame = self.vc.read()
-		if self.color_mode==BW:
-			frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-		return frame
-	def release(self):
-		self.vc.release()
-	def metadata(self):
-		md = {}
-		md['resolution'] = self.resolution
-		md['frame_rate'] = self.frame_rate
-		md['color_mode'] = self.color_mode
-		
-		return md
 class Experiment(object):
 	def __init__(self, cameras=None, daq=None, save_mode=NP, mask_names=('WHEEL','EYE'), monitor_cam_idx=0, motion_mask='WHEEL', movement_query_frames=20, movement_std_thresh=1.0, trigger=None, inter_trial_min=5.0):
 		"""
@@ -145,7 +49,6 @@ class Experiment(object):
 		
 		self.windows = self.make_windows()
 		
-		self.trial_count = 0
 		self.movement_std_thresh = movement_std_thresh
 		self.movement_query_frames = movement_query_frames
 		
@@ -170,9 +73,11 @@ class Experiment(object):
 		runinf = {}
 		runinf['trigger_times'] = []
 		return runinf
-	def new_run(self, new_masks=False):		
+	def new_run(self, new_masks=False,trials=None):		
 		if new_masks or len(self.masks)==0:	
 			self.set_masks()
+		self.trials_total = trials
+		self.trial_count = 0
 		
 		self.run_name = time.strftime("%Y%m%d_%H%M%S")
 		
@@ -288,31 +193,20 @@ class Experiment(object):
 					self.TRIAL_ON = False
 					self.last_trial_off = time.time()
 					if self.save_mode == NP:	self.save()
-					self.trial_count += 1
 			
 			if not self.TRIAL_ON:		
 				c = cv2.waitKey(1)
-				if c == ord('q'):
+				if c == ord('q') or (self.trials_total and self.trial_count==self.trials_total):
 					break
 					
 				if self.query_for_trigger():
 					self.monitor_img_sets[self.monitor_cam_idx] = self.empty_img_set(self.monitor_cam_idx)
 					self.send_trigger()
 					self.TRIAL_ON = time.time()
+					self.trial_count += 1
 					
 		self.end_run()
 		
 	
-if __name__=='__main__':
-	monitor_cam = Camera(idx=0, resolution=(320,240), frame_rate=50, color_mode=BW)
-	behaviour_cam = Camera(idx=1, resolution=(160, 120), frame_rate=10, color_mode=BW)
-	trigger = Trigger(msg=[0,0,1,1], duration=5.0)
-	
-	exp = Experiment(cameras=[monitor_cam], daq=DAQ(), monitor_cam_idx=0, save_mode=NP, trigger=trigger)
-	
-	exp.run(new_masks=True)
-	exp.end()
-
-
 
 	
