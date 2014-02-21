@@ -1,14 +1,15 @@
-from playback import Playback
-import cameras
+from cameras import Camera, BW, COLOR
 from daq import Trigger, DAQ
-import experiments as exp
+from experiments import Experiment, NP, CV
+from playback import Playback
 
-monitor_cam =  cameras.Camera(idx=0, resolution=(320,240), frame_rate=50, color_mode=cameras.BW)
-behaviour_cam = cameras.Camera(idx=1, resolution=(160, 120), frame_rate=10, color_mode=cameras.BW)
+monitor_cam =  Camera(idx=0, resolution=(320,240), frame_rate=50, color_mode=BW)
+behaviour_cam = Camera(idx=1, resolution=(160, 120), frame_rate=10, color_mode=BW)
 trigger = Trigger(msg=[0,0,1,1], duration=5.0)
         
-exp = exp.Experiment(cameras=[monitor_cam], daq=DAQ(), monitor_cam_idx=0, save_mode=exp.NP, trigger=trigger)
+exp = Experiment(cameras=[monitor_cam], daq=DAQ(), monitor_cam_idx=0, save_mode=NP, trigger=trigger)
         
-exp.run(new_masks=True, trials=3)
-exp.end()
+exp.run(new_masks=False, trials=3) #'q' can always be used to end the run early. don't kill the process
+#exp.run(new_masks=False, trials=10)
+#exp.end()
 

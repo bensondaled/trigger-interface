@@ -129,7 +129,7 @@ class Experiment(object):
 			print "Please select mask: %s."%m
 			mask = self.make_mask(cam_idx)
 			self.masks[m] = mask
-			self.mask_idxs[m] = np.nonzero(mask)
+			self.mask_idxs[m] = np.where(mask==False)
 	def save(self, cam_idx=None, frame=None):
 		if self.save_mode == CV:
 			self.writers[cam_idx].write(frame)
