@@ -15,7 +15,7 @@ NP = 0
 CV = 1
 
 class Experiment(object):
-	def __init__(self, cameras=None, daq=None, save_mode=NP, mask_names=('WHEEL','EYE'), monitor_cam_idx=0, motion_mask='WHEEL', movement_query_frames=20, movement_std_thresh=1.0, trigger=None, inter_trial_min=5.0):
+	def __init__(self, cameras=None, daq=None, save_mode=NP, mask_names=('WHEEL','EYE'), monitor_cam_idx=0, motion_mask='WHEEL', movement_query_frames=20, movement_std_thresh=2.0, trigger=None, inter_trial_min=5.0):
 		"""
 		Parameters:
 			cameras: [list of] Camera object[s]
@@ -37,7 +37,7 @@ class Experiment(object):
 		self.monitor_cam_idx = monitor_cam_idx
 		
 		self.daq = daq
-		
+	
 		self.save_mode = save_mode
 		self.img_sets = [self.empty_img_set(i) for i,cam in enumerate(self.cameras)]
 		self.monitor_img_sets = [self.empty_img_set(i) for i,cam in enumerate(self.cameras)]
@@ -78,7 +78,10 @@ class Experiment(object):
 			self.set_masks()
 		self.trials_total = trials
 		self.trial_count = 0
-		
+
+		self.img_sets = [self.empty_img_set(cam_idx) for cam_idx in range(len(self.cameras))]
+                self.times = [[] for i in self.cameras]	
+
 		self.run_name = time.strftime("%Y%m%d_%H%M%S")
 		
 		self.run_info = self.empty_run_info()
@@ -135,8 +138,9 @@ class Experiment(object):
 			self.writers[cam_idx].write(frame)
 		elif self.save_mode == NP:
 			for cam_idx in range(len(self.cameras)):
-				np.save(self.run_name+'-cam%i-trial%i'%(cam_idx,self.trial_count), self.img_sets[cam_idx])
+				np.save(self.run_name+'-cam%i-trial%i'%(cam_idx,self.trial_count), [self.times[cam_idx],self.img_sets[cam_idx]])
 				self.img_sets[cam_idx] = self.empty_img_set(cam_idx)
+                                self.times[cam_idx] = []
 	def make_windows(self):
 		windows = [str(i) for i in range(len(self.cameras))]
 		for w in windows:
@@ -167,6 +171,7 @@ class Experiment(object):
 
 			if self.TRIAL_ON:
 				self.img_sets[cam_idx] = np.append(self.img_sets[cam_idx], [frame], axis=0)
+				self.times[cam_idx].append(time.time())
 			elif not self.TRIAL_ON:
 				if self.save_mode == CV:	self.save(cam_idx, frame)
 				self.monitor_img_sets[cam_idx] = np.append(self.monitor_img_sets[cam_idx], [frame], axis=0)

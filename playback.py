@@ -6,10 +6,13 @@ import matplotlib.animation as ani
 class Playback(object):
         def __init__(self, filename):
                 try:
-                        self.imgs = np.load(filename)
+                        data = np.load(filename)
+                        self.imgs = data[1]
+                        self.time = data[0]
                 except:
                         print "No file found for playback."
                         self.imgs = None
+                        self.time = None
                 
         def play(self, fps=3.):
                 pl.ioff()
