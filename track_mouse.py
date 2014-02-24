@@ -16,7 +16,7 @@ except IndexError:
 	print "Supply movie data file as argument."
 	sys.exit(0)
 
-imgs = np.load(filename)[1]
+imgs = np.load(filename)['data']
 imgs = [np.squeeze(im.astype(np.uint8)) for im in np.split(imgs,np.shape(imgs)[0],axis=0)]
 
 centers = []

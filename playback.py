@@ -7,8 +7,8 @@ class Playback(object):
         def __init__(self, filename):
                 try:
                         data = np.load(filename)
-                        self.imgs = data[1]
-                        self.time = data[0]
+                        self.imgs = data['data']
+                        self.time = data['time']
                 except:
                         print "No file found for playback."
                         self.imgs = None

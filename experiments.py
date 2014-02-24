@@ -39,7 +39,6 @@ class Experiment(object):
 		self.daq = daq
 	
 		self.save_mode = save_mode
-		self.img_sets = [self.empty_img_set(i) for i,cam in enumerate(self.cameras)]
 		self.monitor_img_sets = [self.empty_img_set(i) for i,cam in enumerate(self.cameras)]
 				
 		self.mask_names = mask_names
@@ -80,7 +79,7 @@ class Experiment(object):
 		self.trial_count = 0
 
 		self.img_sets = [self.empty_img_set(cam_idx) for cam_idx in range(len(self.cameras))]
-                self.times = [[] for i in self.cameras]	
+		self.times = [[] for i in self.cameras]	
 
 		self.run_name = time.strftime("%Y%m%d_%H%M%S")
 		
@@ -112,7 +111,7 @@ class Experiment(object):
 		f.close()
 		os.chdir('..')
 	def empty_img_set(self, cam_idx):
-		return np.array([np.empty(self.cameras[cam_idx].resolution[::-1])])
+		return None #np.array([np.empty(self.cameras[cam_idx].resolution[::-1])])
 	def make_mask(self, cam_idx):
 		frame = self.cameras[cam_idx].read()
 		pl.imshow(frame, cmap=mpl_cm.Greys_r)
@@ -138,9 +137,9 @@ class Experiment(object):
 			self.writers[cam_idx].write(frame)
 		elif self.save_mode == NP:
 			for cam_idx in range(len(self.cameras)):
-				np.save(self.run_name+'-cam%i-trial%i'%(cam_idx,self.trial_count), [self.times[cam_idx],self.img_sets[cam_idx]])
+				np.savez_compressed(self.run_name+'-cam%i-trial%i'%(cam_idx,self.trial_count), time=self.times[cam_idx], data=self.img_sets[cam_idx])
 				self.img_sets[cam_idx] = self.empty_img_set(cam_idx)
-                                self.times[cam_idx] = []
+				self.times[cam_idx] = []
 	def make_windows(self):
 		windows = [str(i) for i in range(len(self.cameras))]
 		for w in windows:
@@ -157,26 +156,30 @@ class Experiment(object):
 	def query_for_trigger(self):
 		if time.time()-self.last_trial_off < self.inter_trial_min:
 			return False
-		#method 1:
 		mask_idxs = self.mask_idxs[self.motion_mask]
 		std_pts = np.std(self.monitor_img_sets[self.monitor_cam_idx][:,mask_idxs[0],mask_idxs[1]], axis=0)
 		return np.mean(std_pts) < self.movement_std_thresh
-		
-		#could also try multiplying frames by the mask (not mask_idxs)
-		
-		#could also try using flat idxs (use flatnonzero when originally creating the mask) and apply those to frames.flat somehow
+	def record_frame(self, frame, cam_idx):
+		if self.img_sets[cam_idx] != None:
+			self.img_sets[cam_idx] = np.append(self.img_sets[cam_idx], [frame], axis=0)
+		else:
+			self.img_sets[cam_idx] = np.array([frame])
+	def monitor_frame(self, frame, cam_idx):
+		if self.monitor_img_sets[cam_idx] != None:
+			self.monitor_img_sets[cam_idx] = np.append(self.monitor_img_sets[cam_idx], [frame], axis=0)
+		else:
+			self.monitor_img_sets[cam_idx] = np.array([frame])
+		if np.shape(self.monitor_img_sets[cam_idx])[0]>self.movement_query_frames:
+			self.monitor_img_sets[cam_idx] = self.monitor_img_sets[cam_idx][-self.movement_query_frames:]
 	def next_frame(self):
 		for cam_idx,win,cam in zip(range(len(self.cameras)),self.windows,self.cameras):
 			frame = cam.read()
-
 			if self.TRIAL_ON:
-				self.img_sets[cam_idx] = np.append(self.img_sets[cam_idx], [frame], axis=0)
+				self.record_frame(frame, cam_idx)
 				self.times[cam_idx].append(time.time())
 			elif not self.TRIAL_ON:
 				if self.save_mode == CV:	self.save(cam_idx, frame)
-				self.monitor_img_sets[cam_idx] = np.append(self.monitor_img_sets[cam_idx], [frame], axis=0)
-				if np.shape(self.monitor_img_sets[cam_idx])[0]>self.movement_query_frames:
-					self.monitor_img_sets[cam_idx] = self.monitor_img_sets[cam_idx][-self.movement_query_frames:]
+				self.monitor_frame(frame, cam_idx)
 				cv2.imshow(win, frame)
 	def send_trigger(self):
 		self.daq.trigger(self.trigger)
