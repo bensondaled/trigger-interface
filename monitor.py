@@ -56,6 +56,10 @@ class Monitor(object):
         for win in self.windows:
             cv2.destroyWindow(win)
         [writer.release() for writer in self.writers]
+        
+        f = open("%s-timestamps.json"%self.run_name, 'w')
+        f.write("%s"%json.dumps(self.times))
+        f.close()
         self.convert_to_np()
         os.chdir('..')
     def convert_to_np(self):
