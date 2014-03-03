@@ -77,11 +77,11 @@ class Monitor(object):
             mov.release()
     def next_frame(self):
         for cam_idx,win,cam in zip(range(len(self.cameras)),self.windows,self.cameras):
-            frame = cam.read()
+            frame, timestamp = cam.read()
             if self.show:
                 cv2.imshow(win, frame)
                 c = cv2.waitKey(1)
-            self.times[cam_idx].append(time.time())
+            self.times[cam_idx].append(timestamp)
             self.save(cam_idx, frame)
         return c
     

@@ -113,7 +113,7 @@ class Experiment(object):
 	def empty_img_set(self, cam_idx):
 		return None #np.array([np.empty(self.cameras[cam_idx].resolution[::-1])])
 	def make_mask(self, cam_idx):
-		frame = self.cameras[cam_idx].read()
+		frame, timestamp = self.cameras[cam_idx].read()
 		pl.imshow(frame, cmap=mpl_cm.Greys_r)
 		pts = pl.ginput(0)
 		pl.close()
@@ -173,10 +173,10 @@ class Experiment(object):
 			self.monitor_img_sets[cam_idx] = self.monitor_img_sets[cam_idx][-self.movement_query_frames:]
 	def next_frame(self):
 		for cam_idx,win,cam in zip(range(len(self.cameras)),self.windows,self.cameras):
-			frame = cam.read()
+			frame, timestamp = cam.read()
 			if self.TRIAL_ON:
 				self.record_frame(frame, cam_idx)
-				self.times[cam_idx].append(time.time())
+				self.times[cam_idx].append(timestamp)
 			elif not self.TRIAL_ON:
 				if self.save_mode == CV:	self.save(cam_idx, frame)
 				self.monitor_frame(frame, cam_idx)
