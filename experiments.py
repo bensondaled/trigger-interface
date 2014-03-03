@@ -137,7 +137,7 @@ class Experiment(object):
 			self.writers[cam_idx].write(frame)
 		elif self.save_mode == NP:
 			for cam_idx in range(len(self.cameras)):
-				np.savez_compressed(self.run_name+'-cam%i-trial%i'%(cam_idx,self.trial_count), time=self.times[cam_idx], data=self.img_sets[cam_idx])
+				np.savez_compressed(self.run_name+'-cam%i-trial%i'%(cam_idx,self.trial_count), time=self.times[cam_idx], data=self.img_sets[cam_idx].astype(np.uint8))
 				self.img_sets[cam_idx] = self.empty_img_set(cam_idx)
 				self.times[cam_idx] = []
 	def make_windows(self):
@@ -163,12 +163,12 @@ class Experiment(object):
 		if self.img_sets[cam_idx] != None:
 			self.img_sets[cam_idx] = np.append(self.img_sets[cam_idx], [frame], axis=0)
 		else:
-			self.img_sets[cam_idx] = np.array([frame])
+			self.img_sets[cam_idx] = np.array([frame],dtype=np.uint8)
 	def monitor_frame(self, frame, cam_idx):
 		if self.monitor_img_sets[cam_idx] != None:
 			self.monitor_img_sets[cam_idx] = np.append(self.monitor_img_sets[cam_idx], [frame], axis=0)
 		else:
-			self.monitor_img_sets[cam_idx] = np.array([frame])
+			self.monitor_img_sets[cam_idx] = np.array([frame], dtype=np.uint8)
 		if np.shape(self.monitor_img_sets[cam_idx])[0]>self.movement_query_frames:
 			self.monitor_img_sets[cam_idx] = self.monitor_img_sets[cam_idx][-self.movement_query_frames:]
 	def next_frame(self):

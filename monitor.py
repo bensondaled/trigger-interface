@@ -62,14 +62,14 @@ class Monitor(object):
         for idx,cam in enumerate( [i for i in os.listdir('.') if 'avi' in i] ):
             mov = cv2.VideoCapture(cam)
             valid,frame = mov.read()
-            frames = np.zeros((len(self.times[idx]),np.shape(frame)[0],np.shape(frame)[1]))
+            frames = np.zeros((len(self.times[idx]),np.shape(frame)[0],np.shape(frame)[1]),dtype=np.uint8)
             i = 0
             while valid:
                 frame = cv2.cvtColor(frame, cv2.cv.CV_RGB2GRAY)
-                frames[i,:,:] = frame
+                frames[i,:,:] = frame.astype(np.uint8)
                 valid,frame = mov.read()
                 i += 1
-            np.savez_compressed(cam[:cam.index('.avi')], data=frames, time=self.times[idx])
+            np.savez_compressed(cam[:cam.index('.avi')], data=frames.astype(np.uint8), time=self.times[idx])
             mov.release()
     def next_frame(self):
         for cam_idx,win,cam in zip(range(len(self.cameras)),self.windows,self.cameras):

@@ -27,7 +27,7 @@ class Camera(object):
                 success,frame = self.vc.read() 
                 if self.color_mode==BW: 
                         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) 
-                return frame 
+                return frame.astype(np.uint8) 
         def release(self): 
                 self.vc.release() 
         def metadata(self): 
