@@ -11,8 +11,8 @@ class Trigger(object):
     def msg(self):
         return self._msg
     @msg.setter
-        def msg(self, msg):
-            self._msg = np.array(msg).astype(np.uint8)
+    def msg(self, msg):
+        self._msg = np.array(msg).astype(np.uint8)
 
     def metadata(self):
         md = {}
