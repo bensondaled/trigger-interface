@@ -22,7 +22,7 @@ class Camera(object):
                 self.vc.set(cv.CV_CAP_PROP_FRAME_HEIGHT, self.resolution[1]) 
                          
                 time.sleep(0.1) 
-                #self.vc.read() 
+                self.vc.read() 
         def read(self): 
                 success,frame = self.vc.read() 
                 if self.color_mode==BW: 

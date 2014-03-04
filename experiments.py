@@ -15,7 +15,7 @@ NP = 0
 CV = 1
 
 class Experiment(object):
-	def __init__(self, cameras=None, daq=None, save_mode=NP, mask_names=('WHEEL','EYE'), monitor_cam_idx=0, motion_mask='WHEEL', movement_query_frames=20, movement_std_thresh=2.0, trigger=None, inter_trial_min=5.0):
+	def __init__(self, cameras=None, daq=None, save_mode=NP, mask_names=('WHEEL','EYE'), monitor_cam_idx=0, motion_mask='WHEEL', movement_query_frames=20, movement_std_thresh=1.5, trigger=None, inter_trial_min=5.0):
 		"""
 		Parameters:
 			cameras: [list of] Camera object[s]
@@ -158,6 +158,7 @@ class Experiment(object):
 			return False
 		mask_idxs = self.mask_idxs[self.motion_mask]
 		std_pts = np.std(self.monitor_img_sets[self.monitor_cam_idx][:,mask_idxs[0],mask_idxs[1]], axis=0)
+		print "Movement value: %s"%str(np.mean(std_pts))
 		return np.mean(std_pts) < self.movement_std_thresh
 	def record_frame(self, frame, cam_idx):
 		if self.img_sets[cam_idx] != None:
@@ -212,6 +213,7 @@ class Experiment(object):
 					self.send_trigger()
 					self.TRIAL_ON = time.time()
 					self.trial_count += 1
+					print "Sent trigger #%i"%(self.trial_count)
 					
 		self.end_run()
 		

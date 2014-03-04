@@ -1,5 +1,4 @@
-#import PyDAQmx as pydaq
-import csv as pydaq
+import PyDAQmx as pydaq
 import numpy as np
 
 class Trigger(object):
@@ -24,17 +23,20 @@ class Trigger(object):
 
 class DAQ(object): 
         def __init__(self, port="Dev1/Port1/Line0:3"): 
-                self.port = port 
+                self.port = port
+                self.clear_trig = Trigger(msg=[0,0,0,0])
                 try: 
                         self.task = pydaq.TaskHandle() 
                         pydaq.DAQmxCreateTask("", pydaq.byref(self.task)) 
                         pydaq.DAQmxCreateDOChan(self.task, self.port, "OutputOnly", pydaq.DAQmx_Val_ChanForAllLines) 
                         pydaq.DAQmxStartTask(self.task) 
                 except: 
-                        self.task = None 
+                        self.task = None
+                        print "DAQ task did not successfully initialize."
         def trigger(self, trig): 
                 if self.task: 
-                        DAQmxWriteDigitalLines(self.task,1,1,10.0,pydaq.DAQmx_Val_GroupByChannel,trig.msg,None,None) 
+                        pydaq.DAQmxWriteDigitalLines(self.task,1,1,10.0,pydaq.DAQmx_Val_GroupByChannel,trig.msg,None,None)
+                        pydaq.DAQmxWriteDigitalLines(self.task,1,1,10.0,pydaq.DAQmx_Val_GroupByChannel,self.clear_trig.msg,None,None)						
                 else: 
                         print "DAQ task not functional. Attempted to write %s."%str(trig.msg) 
         def release(self): 
