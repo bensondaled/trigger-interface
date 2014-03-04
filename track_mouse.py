@@ -6,7 +6,7 @@ import cv2
 cv = cv2.cv
 
 thresh = 10
-duration = 1 
+duration = 1
 delta_max = 100
 delta_min = 10
 
@@ -29,7 +29,7 @@ for idx,img in zip(range(1,len(imgs)), imgs[1:]):
     cv2.updateMotionHistory(motion_mask, motion_history, idx, duration)
     gradient_mask, gradient_orientation = cv2.calcMotionGradient(motion_history, delta_max, delta_min)
     seg_mask, seg_bounds = cv2.segmentMotion(motion_history, idx, delta_max)
-    if len(seg_bounds):  
+    if len(seg_bounds):
         largest_idx = np.argmax([b[2]*b[3] for b in seg_bounds])
         largest = seg_bounds[largest_idx]
                 #pl.clf()

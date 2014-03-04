@@ -6,4 +6,3 @@ from playback import Playback as PB
 cam = Camera(0, frame_rate=10, color_mode=BW)
 mon = Monitor(cam, show=True)
 mon.run(duration=60)
-
