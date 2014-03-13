@@ -8,7 +8,7 @@ cv = cv2.cv
 
 
 class Monitor(object):
-    def __init__(self, cameras=None, show=True, save=True):
+    def __init__(self, cameras=None, show=True, save_on=True):
         if type(cameras) == Camera:
             self.cameras = [cameras]
         elif type(cameras) == list:
@@ -17,10 +17,10 @@ class Monitor(object):
             self.cameras = []
         
         self.show = show
-        self.save = save
+        self.save_on = save_on
         self.windows = self.make_windows()
         
-        if self.save:
+        if self.save_on:
             self.times = [[] for i in self.cameras] 
 
             self.run_name = time.strftime("%Y%m%d_%H%M%S")
@@ -59,7 +59,7 @@ class Monitor(object):
         for win in self.windows:
             cv2.destroyWindow(win)
             
-        if self.save:
+        if self.save_on:
             [writer.release() for writer in self.writers]
             
             f = open("%s-timestamps.json"%self.run_name, 'w')
@@ -87,7 +87,7 @@ class Monitor(object):
             if self.show:
                 cv2.imshow(win, frame)
                 c = cv2.waitKey(1)
-            if self.save:
+            if self.save_on:
                 self.times[cam_idx].append(timestamp)
                 self.save(cam_idx, frame)
         return c
