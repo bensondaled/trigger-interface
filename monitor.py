@@ -8,7 +8,7 @@ cv = cv2.cv
 
 
 class Monitor(object):
-    def __init__(self, cameras=None, show=True, save_on=True):
+    def __init__(self, cameras=None, show=True, save_on=True, run_name='', duration=99999999999.):
         if type(cameras) == Camera:
             self.cameras = [cameras]
         elif type(cameras) == list:
@@ -19,11 +19,14 @@ class Monitor(object):
         self.show = show
         self.save_on = save_on
         self.windows = self.make_windows()
-        
+        self.duration = duration
         if self.save_on:
             self.times = [[] for i in self.cameras] 
 
-            self.run_name = time.strftime("%Y%m%d_%H%M%S")
+            self.run_time = time.strftime("%Y%m%d_%H%M%S")
+            self.run_name = run_name
+            if self.run_name == '':
+                self.run_name = self.run_time
             os.mkdir(self.run_name)
             os.chdir(self.run_name)
             
@@ -35,17 +38,13 @@ class Monitor(object):
             
             dic = {}
             dic['run_name'] = self.run_name
-            dic['experiment'] = self.metadata()
+            dic['run_time'] = self.run_time
             dic['cameras'] = [cam.metadata() for cam in self.cameras]
             
             f = open("%s-metadata.json"%self.run_name, 'w')
             f.write("%s"%json.dumps(dic))
             f.close()
         
-    def metadata(self):
-        md = {}
-        md['n_cameras'] = len(self.cameras)
-        return md
     def save(self, cam_idx=None, frame=None):
         self.writers[cam_idx].write(frame)
     def make_windows(self):
@@ -65,7 +64,7 @@ class Monitor(object):
             f = open("%s-timestamps.json"%self.run_name, 'w')
             f.write("%s"%json.dumps(self.times))
             f.close()
-            self.convert_to_np()
+            #self.convert_to_np()
             os.chdir('..')
     def convert_to_np(self):
         for idx,cam in enumerate( [i for i in os.listdir('.') if 'avi' in i] ):
@@ -92,13 +91,32 @@ class Monitor(object):
                 self.save(cam_idx, frame)
         return c
     
-    def run(self, duration=999999999.):
+    def go(self):
         t = time.time()
         c = None
-        while time.time()-t < duration and c!=ord('q'):
+        while time.time()-t < self.duration and c!=ord('q'):
             c = self.next_frame()
         self.end()
 
+def convert_to_np(dirname):
+    os.chdir(dirname)
+    timefile = [i for i in os.listdir('.') if 'timestamps' in i][0]
+    time = json.loads(open(timefile,'r').read())
+    for idx,cam in enumerate( [i for i in os.listdir('.') if 'avi' in i] ):
+        t = time[idx]
+        mov = cv2.VideoCapture(cam)
+        valid,frame = mov.read()
+        frames = np.zeros((len(t),np.shape(frame)[0],np.shape(frame)[1]),dtype=np.uint8)
+        j = 0
+        while valid:
+            frame = cv2.cvtColor(frame, cv2.cv.CV_RGB2GRAY)
+            frames[j,:,:] = frame.astype(np.uint8)
+            valid,frame = mov.read()
+            j += 1
+        np.savez_compressed(cam[:cam.index('.avi')], data=frames.astype(np.uint8), time=t)
+        mov.release()
+    os.chdir('..')
+
 if __name__ == '__main__':
-    m = Monitor(cameras=Camera(), show=True, save=False)
-    m.run()
+    m = Monitor(cameras=Camera(), show=True, save_on=False)
+    m.go()
