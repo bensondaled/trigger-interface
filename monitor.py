@@ -30,7 +30,7 @@ class Monitor(object):
             os.mkdir(self.run_name)
             os.chdir(self.run_name)
             
-            self.writers = [cv2.VideoWriter(self.run_name+"-cam%i.avi"%i,0,\
+            self.writers = [cv2.VideoWriter(self.run_name+"-cam%i.avi"%i,-1,\
             cam.frame_rate,\
             frameSize=cam.resolution,\
             isColor=False) \
