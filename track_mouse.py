@@ -16,8 +16,8 @@ except IndexError:
     print "Supply movie data file as argument."
     sys.exit(0)
 
-imgs = np.load(filename)['data']
-imgs = [np.squeeze(im.astype(np.uint8)) for im in np.split(imgs,np.shape(imgs)[0],axis=0)]
+#imgs = np.load(filename)['data']
+#imgs = [np.squeeze(im.astype(np.uint8)) for im in np.split(imgs,np.shape(imgs)[0],axis=0)]
 
 centers = []
 
@@ -32,11 +32,11 @@ for idx,img in zip(range(1,len(imgs)), imgs[1:]):
     if len(seg_bounds):
         largest_idx = np.argmax([b[2]*b[3] for b in seg_bounds])
         largest = seg_bounds[largest_idx]
-                #pl.clf()
-        #pl.imshow(img)
-                #pl.gca().add_patch(pl.Rectangle(largest[:2],largest[-2],largest[-1]))
-        #print largest
-        #raw_input()
+        pl.clf()
+        pl.imshow(img)
+        pl.gca().add_patch(pl.Rectangle(largest[:2],largest[-2],largest[-1]))
+        print largest
+        raw_input()
         centers.append((int(largest[0]+round(0.5*largest[2])), int(largest[1]+round(0.5*largest[3]))))
     else:
         #print "skipped a frame because no difference"

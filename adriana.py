@@ -17,6 +17,6 @@ while type(duration) != float:
     except:
         pass
 
-cam = Camera(0, frame_rate=30, color_mode=BW)
+cam = Camera(1, frame_rate=30, color_mode=BW)
 mon = Monitor(cam, show=True, run_name=name, duration=duration)
 mon.go()
