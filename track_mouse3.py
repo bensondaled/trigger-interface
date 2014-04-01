@@ -14,11 +14,10 @@ show = raw_input('Show? (0/1) ')
 show = int(show)
 
 SHOW = show
-RESAMPLE = 5
+RESAMPLE = 8
 
 cv2.namedWindow('img')
 cv2.namedWindow('diff')
-cv2.namedWindow('motionmask')
 
 
 thresh = 15
@@ -131,9 +130,9 @@ try:
     pts_mouse = pts['pts_mouse']
 except:
     pl.imshow(first, cmap=mpl_cm.Greys_r)
-    print "Select left room."
+    print "Select left room- around the corners in order."
     pts_l = ginput(4)
-    print "Select right room."
+    print "Select right room- around the corners in order."
     pts_r = ginput(4)
     print "Select mouse."
     pts_mouse = ginput(4)
@@ -146,20 +145,29 @@ left_border = np.min([i[0] for i in allpoints])
 right_border = np.max([i[0] for i in allpoints])
 top_border = np.min([i[1] for i in allpoints])
 bottom_border = np.max([i[1] for i in allpoints])
+allpath = mpl_path.Path([[left_border,top_border],[right_border,top_border],[right_border,bottom_border],[left_border,bottom_border]])
+
+rooms_mask = np.zeros(np.shape(baseline))
+for row in range(height):
+    for col in range(width):
+        pt = [col,row]
+        rooms_mask[row][col] = allpath.contains_point(pt)
 
 idx = 0
 widgets=[' Iterating through images...', Percentage(), Bar()]
 pbar = ProgressBar(widgets=widgets, maxval=len(time)/RESAMPLE).start()
 
 while True:
-    valid,frame = get_frame(mov,skip=RESAMPLE)
+    valid,frame = get_frame(mov,skip=RESAMPLE-1)
     if not valid:
         break
     diff = cv2.absdiff(frame,baseline)
     _, diff = cv2.threshold(diff, diff_thresh, 1, cv2.THRESH_BINARY)
+    diff = diff*rooms_mask
     edges = cv2.Canny(diff.astype(np.uint8), cth1, cth2)
     contours, hier = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_TC89_L1)
-    possible = [b for b in contours if contour_center(b)[0] > left_border and contour_center(b)[0] < right_border and contour_center(b)[1]>top_border and contour_center(b)[1]<bottom_border]
+    possible = contours
+    #possible = [b for b in contours if contour_center(b)[0] > left_border and contour_center(b)[0] < right_border and contour_center(b)[1]>top_border and contour_center(b)[1]<bottom_border]
     possible = [c for c in possible if dist(contour_center(c),last_center)<translation_thresh]
     if len(possible) == 0:
         center = last_center
@@ -181,7 +189,13 @@ while True:
     #display
     if SHOW:
         showimg = np.copy(frame).astype(np.uint8)
-        cv2.circle(showimg, tuple(center), radius=10, thickness=5, color=(255,255,255))
+        if path_l.contains_point(center):
+            color = (0,0,0)
+        elif path_r.contains_point(center):
+            color = (255,255,255)
+        else:
+            color = (120,120,120)
+        cv2.circle(showimg, tuple(center), radius=10, thickness=5, color=color)
         cv2.imshow('img',showimg)
         cv2.imshow('diff', diff)
         cv2.waitKey(1)
