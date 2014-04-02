@@ -218,6 +218,13 @@ class MouseTracker(object):
             frame = frame/i
         return (valid, frame)
     def run(self, show=False, save=False):
+
+        if save:
+            bgs = np.shape(self.background)
+            fsize = (bgs[0], bgs[1]*2)
+            writer = cv2.VideoWriter()
+            writer.open(os.path.join(self.trial_dir,'%s_tracking_movie.mov'%self.trial_name),cv.CV_FOURCC('D','I','V','X'),30,frameSize=fsize,isColor=False)
+
         self.results['n_frames'] = 0
         widgets=[' Iterating through images...', Percentage(), Bar()]
         pbar = ProgressBar(widgets=widgets, maxval=len(self.time)/self.resample).start()
@@ -264,11 +271,18 @@ class MouseTracker(object):
                 cv2.imshow('Tracking', diff)
                 cv2.waitKey(1)
             #/display
+            if save:
+                save_frame = np.zeros(fsize,dtype=np.uint8)
+                save_frame[:,:np.shape(frame)[1]] = np.round(frame).astype(np.uint8)
+                save_frame[:,np.shape(frame)[1]:] = np.round(diff).astype(np.uint8)
+                writer.write(save_frame)
              
             self.results['n_frames'] += 1
             self.last_center = center
             pbar.update(self.results['n_frames'])
         pbar.finish()
+        if save:
+            writer.release()
         self.end()
 
 if __name__=='__main__':
@@ -276,8 +290,8 @@ if __name__=='__main__':
     mode = TEST
     data_directory = '/Volumes/BENSON32GB/'
     
-    #mt = MouseTracker(mouse=mouse, mode=mode, data_directory=data_directory, resample=120)
-    #mt.run(show=True)
+    mt = MouseTracker(mouse=mouse, mode=mode, data_directory=data_directory, resample=8)
+    mt.run(show=False, save=True)
 
     a = Analysis(mouse, mode, data_directory=data_directory)
     a.make_fig1()
