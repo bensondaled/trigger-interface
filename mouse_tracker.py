@@ -33,14 +33,17 @@ class FileHandler(object):
         self.items[CONTROL] = {BACKGROUND:{}, TRIAL:{}}
         self.items[TEST] = {BACKGROUND:{}, TRIAL:{}}
         
-        self.items[CONTROL][BACKGROUND][NAME] = mouse+'_BG'
-        self.items[CONTROL][BACKGROUND][DIR] = os.path.join(data_dir, self.items[CONTROL][BACKGROUND][NAME])
-        self.items[CONTROL][TRIAL][NAME] = mouse+'_BS'
-        self.items[CONTROL][TRIAL][DIR] = os.path.join(data_dir, self.items[CONTROL][TRIAL][NAME])
-        self.items[TEST][BACKGROUND][NAME] = mouse+'_test_BG'
-        self.items[TEST][BACKGROUND][DIR] = os.path.join(data_dir, self.items[TEST][BACKGROUND][NAME])
-        self.items[TEST][TRIAL][NAME] = mouse+'_test'
-        self.items[TEST][TRIAL][DIR] = os.path.join(data_dir, self.items[TEST][TRIAL][NAME])
+        try:
+            self.items[CONTROL][BACKGROUND][NAME] = mouse+'_BG'
+            self.items[CONTROL][BACKGROUND][DIR] = os.path.join(data_dir, self.items[CONTROL][BACKGROUND][NAME])
+            self.items[CONTROL][TRIAL][NAME] = mouse+'_BS'
+            self.items[CONTROL][TRIAL][DIR] = os.path.join(data_dir, self.items[CONTROL][TRIAL][NAME])
+            self.items[TEST][BACKGROUND][NAME] = mouse+'_test_BG'
+            self.items[TEST][BACKGROUND][DIR] = os.path.join(data_dir, self.items[TEST][BACKGROUND][NAME])
+            self.items[TEST][TRIAL][NAME] = mouse+'_test'
+            self.items[TEST][TRIAL][DIR] = os.path.join(data_dir, self.items[TEST][TRIAL][NAME])
+        except:
+            raise Exception('Files were not named and/or located properly.')
     def __getitem__(self, item):
         return self.items[item]
 
@@ -223,7 +226,7 @@ class MouseTracker(object):
             bgs = np.shape(self.background)
             fsize = (bgs[0], bgs[1]*2)
             writer = cv2.VideoWriter()
-            writer.open(os.path.join(self.trial_dir,'%s_tracking_movie.mov'%self.trial_name),cv.CV_FOURCC('D','I','V','X'),30,frameSize=fsize,isColor=False)
+            writer.open(os.path.join(self.trial_dir,'%s_tracking_movie'%self.trial_name),cv.CV_FOURCC('m','p','4','v'),37./self.resample,frameSize=(fsize[1],fsize[0]),isColor=True)
 
         self.results['n_frames'] = 0
         widgets=[' Iterating through images...', Percentage(), Bar()]
@@ -272,9 +275,9 @@ class MouseTracker(object):
                 cv2.waitKey(1)
             #/display
             if save:
-                save_frame = np.zeros(fsize,dtype=np.uint8)
-                save_frame[:,:np.shape(frame)[1]] = np.round(frame).astype(np.uint8)
-                save_frame[:,np.shape(frame)[1]:] = np.round(diff).astype(np.uint8)
+                save_frame = np.zeros([fsize[0], fsize[1], 3],dtype=np.uint8)
+                save_frame[:,:np.shape(frame)[1]] = cv2.cvtColor(showimg.astype(np.float32), cv.CV_GRAY2RGB)
+                save_frame[:,np.shape(frame)[1]:] = cv2.cvtColor((diff*255).astype(np.float32), cv.CV_GRAY2RGB)
                 writer.write(save_frame)
              
             self.results['n_frames'] += 1
@@ -286,13 +289,23 @@ class MouseTracker(object):
         self.end()
 
 if __name__=='__main__':
-    mouse = 'Black6_5'
-    mode = TEST
     data_directory = '/Volumes/BENSON32GB/'
-    
-    mt = MouseTracker(mouse=mouse, mode=mode, data_directory=data_directory, resample=8)
-    mt.run(show=False, save=True)
+    save_tracking_video = False
+    show_live_tracking = False
+    mice = ['Black6_5', 'Black6_6', 'Black6_7']
+   
+    for mouse in mice:
+        for mode in [CONTROL, TEST]:
+            print
+            print 'Now starting mouse \'%s\', %s trial.'%(mouse, {CONTROL:'control', TEST:'test'}[mode])
+            try:
+                mt = MouseTracker(mouse=mouse, mode=mode, data_directory=data_directory, resample=8)
+                mt.run(show=show_live_tracking, save=save_tracking_video)
+                print 'Completed mouse \'%s\', %s trial.'%(mouse, {CONTROL:'control', TEST:'test'}[mode])
+            except:
+                print 'Failed to complete mouse \'%s\', %s trial.'%(mouse, {CONTROL:'control', TEST:'test'}[mode])
+            print
 
-    a = Analysis(mouse, mode, data_directory=data_directory)
-    a.make_fig1()
+    #a = Analysis(mouse, mode, data_directory=data_directory)
+    #a.make_fig1()
 
