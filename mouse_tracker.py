@@ -107,6 +107,13 @@ class MouseTracker(object):
         self.duration = 1
         self.cth1 = 0
         self.cth2 = 0
+        plat = sys.platform
+        if 'darwin' in plat:
+            self.fourcc = cv.CV_FOURCC('m','p','4','v') 
+        elif plat[:3] == 'win':
+            self.fourcc = 1
+        else:
+            self.fourcc = -1
 
         cv2.namedWindow('Movie')
         cv2.namedWindow('Tracking')
@@ -226,7 +233,7 @@ class MouseTracker(object):
             bgs = np.shape(self.background)
             fsize = (bgs[0], bgs[1]*2)
             writer = cv2.VideoWriter()
-            writer.open(os.path.join(self.trial_dir,'%s_tracking_movie'%self.trial_name),cv.CV_FOURCC('m','p','4','v'),37./self.resample,frameSize=(fsize[1],fsize[0]),isColor=True)
+            writer.open(os.path.join(self.trial_dir,'%s_tracking_movie'%self.trial_name),self.fourcc,37./self.resample,frameSize=(fsize[1],fsize[0]),isColor=True)
 
         self.results['n_frames'] = 0
         widgets=[' Iterating through images...', Percentage(), Bar()]
