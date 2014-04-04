@@ -10,6 +10,8 @@ import json
 from pylab import ion, title, close
 from pylab import imshow as plimshow
 from pylab import ginput as plginput
+from pylab import savefig as plsavefig
+from pylab import close as plclose
 ion()
 from cv2 import getRotationMatrix2D, warpAffine, namedWindow, VideoCapture, destroyAllWindows, cvtColor, GaussianBlur, VideoWriter, absdiff, threshold, THRESH_BINARY, Canny, findContours,  RETR_EXTERNAL, CHAIN_APPROX_TC89_L1, contourArea, circle, waitKey
 from cv2 import imshow as cv2imshow
@@ -97,6 +99,8 @@ class Analysis(object):
         tr_rotated = warpAffine(track_crop, M=rot_mat, dsize=np.shape(background_crop)[::-1])
         plimshow(bl_rotated, cmap=mpl_cm.Greys_r)
         plimshow(np.ma.masked_where(tr_rotated==0.,tr_rotated), cmap=mpl_cm.jet, interpolation=None)
+        plsavefig(self.trial_dir+'/%s_summary.png'%self.trial_name)
+        plclose()
 
 class MouseTracker(object):
     def __init__(self, mouse, mode,  data_directory='.', diff_thresh=100, resample=8, translation_max=130, smoothing_kernel=15):
@@ -372,8 +376,11 @@ if __name__=='__main__':
                     try:
                         mt = MouseTracker(mouse=mouse, mode=mode, data_directory=data_dir, resample=resample)
                         mt.run(show=show_live_tracking, save=save_tracking_video, tk_var_frame=(self.status2, self.frame))
+                        a = Analysis(mouse, mode, data_directory=data_dir)
+                        a.make_fig1()
                     except:
                         pass
+            self.parent.destroy()
     def parse_mice_names(items):
         good = []
         for item in items:
@@ -395,8 +402,5 @@ if __name__=='__main__':
 
     frame = MainFrame(root, options=options)
     root.mainloop()
-    
    
-    #a = Analysis(mouse, mode, data_directory=data_directory)
-    #a.make_fig1()
 
