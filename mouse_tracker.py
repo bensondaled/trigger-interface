@@ -67,7 +67,12 @@ class Analysis(object):
         bg = np.load(os.path.join(self.background_dir,'%s_background.npz'%self.background_name))
         background = bg['image']
 
-        track = np.load(os.path.join(self.trial_dir,'%s_tracking.npz'%self.trial_name))['heat']
+        tracking = np.load(os.path.join(self.trial_dir,'%s_tracking.npz'%self.trial_name))
+        track = tracking['heat']
+        nframes = tracking['n_frames']
+        skipped = tracking['skipped']
+        frames = nframes-skipped
+        centers = tracking['centers']
         
         height, width = np.shape(background)
         pts = np.load(self.trial_dir+'/%s_selections.npz'%self.trial_name)
@@ -99,10 +104,10 @@ class Analysis(object):
         plimshow(np.ma.masked_where(track_crop==0., track_crop), cmap=mpl_cm.jet)
         plsavefig(self.trial_dir+'/%s_summary.png'%self.trial_name)
         plclose()
-        return (background_crop,track_crop)
+        return (background_crop,track_crop,frames,centers)
 
 class MouseTracker(object):
-    def __init__(self, mouse, mode,  data_directory='.', diff_thresh=100, resample=8, translation_max=100, smoothing_kernel=19, consecutive_skip_threshold=100):
+    def __init__(self, mouse, mode,  data_directory='.', diff_thresh=100, resample=8, translation_max=100, smoothing_kernel=19, consecutive_skip_threshold=2):
         self.mouse = mouse
         self.data_dir = data_directory
         
@@ -111,7 +116,7 @@ class MouseTracker(object):
         self.resample = resample
         self.translation_max = translation_max
         self.kernel = smoothing_kernel
-        self.consecutive_skip_threshold = consecutive_skip_threshold
+        self.consecutive_skip_threshold = (37./self.resample) * consecutive_skip_threshold
 
         # Parameters (you should not vary)
         self.duration = 1
@@ -142,6 +147,7 @@ class MouseTracker(object):
         
         self.results = {}
         self.results['centers'] = []
+        self.results['centers_all'] = []
         self.results['left'] = 0
         self.results['right'] = 0
         self.results['left_assumed'] = 0
@@ -297,7 +303,7 @@ class MouseTracker(object):
                     self.results['left']+=1
                 if self.path_r.contains_point(center):
                     self.results['right']+=1
-            
+            self.results['centers_all'].append(center) 
             #display
             if show or save:
                 showimg = np.copy(frame).astype(np.uint8)
