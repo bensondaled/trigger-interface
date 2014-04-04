@@ -67,11 +67,6 @@ class Analysis(object):
         bg = np.load(os.path.join(self.background_dir,'%s_background.npz'%self.background_name))
         background = bg['image']
 
-        theCM = mpl_cm.get_cmap()
-        theCM._init()
-        alphas = np.abs(np.linspace(-1.0, 1.0, theCM.N))
-        theCM._lut[:-3,-1] = alphas
-        
         track = np.load(os.path.join(self.trial_dir,'%s_tracking.npz'%self.trial_name))['heat']
         
         height, width = np.shape(background)
@@ -88,22 +83,26 @@ class Analysis(object):
         background_crop = background[top:bottom, left:right]
         track_crop = track[top:bottom, left:right]
 
-        leftmost = pts_l[np.argsort([p[0] for p in pts_l])][:2]
-        rightmost = pts_r[np.argsort([p[0] for p in pts_r])][-2:]
-        topleft = leftmost[np.argmin([p[1] for p in leftmost])]
-        topright = rightmost[np.argmin([p[1] for p in rightmost])]
-        theta = np.degrees(np.arctan2(topright[1]-topleft[1], topright[0]-topleft[0]))
+        #leftmost = pts_l[np.argsort([p[0] for p in pts_l])][:2]
+        #rightmost = pts_r[np.argsort([p[0] for p in pts_r])][-2:]
+        #topleft = leftmost[np.argmin([p[1] for p in leftmost])]
+        #topright = rightmost[np.argmin([p[1] for p in rightmost])]
+        #theta = np.degrees(np.arctan2(topright[1]-topleft[1], topright[0]-topleft[0]))
 
-        rot_mat = getRotationMatrix2D(center=(0,0), angle=theta, scale=1)
-        bl_rotated = warpAffine(background_crop, M=rot_mat, dsize=np.shape(background_crop)[::-1])
-        tr_rotated = warpAffine(track_crop, M=rot_mat, dsize=np.shape(background_crop)[::-1])
-        plimshow(bl_rotated, cmap=mpl_cm.Greys_r)
-        plimshow(np.ma.masked_where(tr_rotated==0.,tr_rotated), cmap=mpl_cm.jet, interpolation=None)
+        #rot_mat = getRotationMatrix2D(center=(0,0), angle=theta, scale=1)
+        #bl_rotated = warpAffine(background_crop, M=rot_mat, dsize=np.shape(background_crop)[::-1])
+        #tr_rotated = warpAffine(track_crop, M=rot_mat, dsize=np.shape(background_crop)[::-1])
+        #plimshow(bl_rotated, cmap=mpl_cm.Greys_r)
+        #plimshow(np.ma.masked_where(tr_rotated==0.,tr_rotated), cmap=mpl_cm.jet, interpolation=None)
+        #plsavefig(self.trial_dir+'/%s_summary-rotation.png'%self.trial_name)
+        plimshow(background_crop, cmap=mpl_cm.Greys_r)
+        plimshow(np.ma.masked_where(track_crop==0., track_crop), cmap=mpl_cm.jet)
         plsavefig(self.trial_dir+'/%s_summary.png'%self.trial_name)
         plclose()
+        return (background_crop,track_crop)
 
 class MouseTracker(object):
-    def __init__(self, mouse, mode,  data_directory='.', diff_thresh=100, resample=8, translation_max=130, smoothing_kernel=15):
+    def __init__(self, mouse, mode,  data_directory='.', diff_thresh=100, resample=8, translation_max=100, smoothing_kernel=19, consecutive_skip_threshold=100):
         self.mouse = mouse
         self.data_dir = data_directory
         
@@ -112,6 +111,7 @@ class MouseTracker(object):
         self.resample = resample
         self.translation_max = translation_max
         self.kernel = smoothing_kernel
+        self.consecutive_skip_threshold = consecutive_skip_threshold
 
         # Parameters (you should not vary)
         self.duration = 1
@@ -152,7 +152,7 @@ class MouseTracker(object):
         self.results['params'] = [self.diff_thresh, self.kernel, self.translation_max, self.resample]
         self.results['params_key'] = ['diff_thresh','kernel','translation_max','resample']
 
-        self.path_l, self.path_r, self.rooms_mask, self.last_center = self.get_pt_selections()
+        self.path_l, self.path_r, self.rooms_mask, self.paths_ignore, self.last_center = self.get_pt_selections()
     def end(self):
         np.savez(os.path.join(self.trial_dir,'%s_tracking'%self.trial_name), **self.results)
         savemat(os.path.join(self.trial_dir,'%s_tracking'%self.trial_name), self.results)
@@ -160,12 +160,13 @@ class MouseTracker(object):
         self.mov.release()
         destroyAllWindows()
     def get_pt_selections(self):
-        valid,first = self.get_frame(self.mov, blur=False)
+        valid,first = self.get_frame(self.mov, blur=False, n=30)
         try:
             pts = np.load(os.path.join(self.trial_dir, '%s_selections.npz'%self.trial_name))
             pts_l = pts['pts_l']
             pts_r = pts['pts_r']
             pts_mouse = pts['pts_mouse']
+            regions_ignore = pts['regions_ignore']
         except:
             plimshow(first, cmap=mpl_cm.Greys_r)
             title("Select left room- around the corners in order.")
@@ -174,8 +175,22 @@ class MouseTracker(object):
             pts_r = ginput(4)
             title("Select mouse.")
             pts_mouse = ginput(4)
+            
+            valid,frame = self.get_frame(self.mov)
+            diff = absdiff(frame,self.background)
+            _, diff = threshold(diff, self.diff_thresh, 1, THRESH_BINARY)
+            plimshow(np.ma.masked_where(diff==0, diff), cmap=mpl_cm.jet)
+            regions_ignore = []
+            pts_ignore = [1]
+            title("Select cups and any colored regions in the rooms that are not the mouse. (8pts per)")
+            while True:
+                pts_ignore = ginput(8)
+                if not pts_ignore.any():
+                    break
+                regions_ignore.append(pts_ignore)
+            regions_ignore = np.array(regions_ignore)
             close()
-            np.savez(os.path.join(self.trial_dir, '%s_selections'%self.trial_name), pts_l=pts_l, pts_r=pts_r, pts_mouse=pts_mouse)
+            np.savez(os.path.join(self.trial_dir, '%s_selections'%self.trial_name), pts_l=pts_l, pts_r=pts_r, pts_mouse=pts_mouse, regions_ignore=regions_ignore)
         path_l, path_r = [mpl_path.Path(pts) for pts in [pts_l,pts_r]]
         last_center = np.round(np.mean(pts_mouse, axis=0)).astype(int)
         allpoints = np.append(pts_l,pts_r,axis=0)
@@ -185,13 +200,15 @@ class MouseTracker(object):
         bottom_border = np.max([i[1] for i in allpoints])
         allpath = mpl_path.Path([[left_border,top_border],[right_border,top_border],[right_border,bottom_border],[left_border,bottom_border]])
 
+        paths_ignore = [mpl_path.Path(pts) for pts in regions_ignore]
+
         rooms_mask = np.zeros(np.shape(self.background))
         for row in range(self.height):
             for col in range(self.width):
                 pt = [col,row]
                 rooms_mask[row][col] = allpath.contains_point(pt)
 
-        return (path_l, path_r, rooms_mask, last_center)
+        return (path_l, path_r, rooms_mask, paths_ignore, last_center)
     def load_background(self):
         try:
             bg = np.load(self.background_dir+'/%s_background.npz'%self.background_name)
@@ -200,7 +217,7 @@ class MouseTracker(object):
         except:
             #print "Acquiring background information..."
             blmov = VideoCapture(os.path.join(self.background_dir, self.background_name+'-cam0.avi'))
-            valid, background = self.get_frame(blmov, n=-1)
+            valid, background = self.get_frame(blmov, n=-1, blur=True)
             blmov.release()
             
             blmov = VideoCapture(os.path.join(self.background_dir, self.background_name+'-cam0.avi'))
@@ -243,9 +260,10 @@ class MouseTracker(object):
             bgs = np.shape(self.background)
             fsize = (bgs[0], bgs[1]*2)
             writer = VideoWriter()
-            writer.open(os.path.join(self.trial_dir,'%s_tracking_movie'%self.trial_name),self.fourcc,37./self.resample,frameSize=(fsize[1],fsize[0]),isColor=True)
+            writer.open(os.path.join(self.trial_dir,'%s_tracking_movie'%self.trial_name),self.fourcc,37.,frameSize=(fsize[1],fsize[0]),isColor=True)
 
         self.results['n_frames'] = 0
+        consecutive_skips = 0
         while True:
             valid,frame = self.get_frame(self.mov,skip=self.resample-1)
             if not valid:
@@ -255,11 +273,17 @@ class MouseTracker(object):
             diff = diff*self.rooms_mask
             edges = Canny(diff.astype(np.uint8), self.cth1, self.cth2)
             contours, hier = findContours(edges, RETR_EXTERNAL, CHAIN_APPROX_TC89_L1)
-            possible = [c for c in contours if dist(contour_center(c),self.last_center)<self.translation_max]
+            contours = [c for c in contours if not any([pa.contains_point(contour_center(c)) for pa in self.paths_ignore])]
+            if consecutive_skips>self.consecutive_skip_threshold:
+                consecutive_skips=0
+                possible = contours
+            else:
+                possible = [c for c in contours if dist(contour_center(c),self.last_center)<self.translation_max]
             
             if len(possible) == 0:
                 center = self.last_center
                 self.results['skipped'] += 1
+                consecutive_skips+=1
                 if self.path_l.contains_point(center):
                     self.results['left_assumed']+=1
                 if self.path_r.contains_point(center):
@@ -275,7 +299,7 @@ class MouseTracker(object):
                     self.results['right']+=1
             
             #display
-            if show:
+            if show or save:
                 showimg = np.copy(frame).astype(np.uint8)
                 if self.path_l.contains_point(center):
                     color = (0,0,0)
@@ -284,9 +308,10 @@ class MouseTracker(object):
                 else:
                     color = (120,120,120)
                 circle(showimg, tuple(center), radius=10, thickness=5, color=color)
-                cv2imshow('Movie',showimg)
-                cv2imshow('Tracking', diff)
-                waitKey(1)
+                if show:
+                    cv2imshow('Movie',showimg)
+                    cv2imshow('Tracking', diff)
+                    waitKey(1)
             #/display
             if save:
                 save_frame = np.zeros([fsize[0], fsize[1], 3],dtype=np.uint8)
@@ -316,7 +341,10 @@ if __name__=='__main__':
             self.show = tk.IntVar()
             self.save = tk.IntVar()
             self.resample = tk.StringVar()
-            self.resample.set('8')
+            self.resample.set('5')
+            self.diff_thresh = tk.StringVar()
+            self.diff_thresh.set('80')
+            self.bltest = tk.IntVar()
             
             self.initUI(options)
         def initUI(self, options):
@@ -334,12 +362,22 @@ if __name__=='__main__':
             self.show_widg = ttk.Checkbutton(self.frame, text='Show tracking', variable=self.show)
             self.save_widg = ttk.Checkbutton(self.frame, text='Save tracking video', variable=self.save)
             self.resample_widg = ttk.Entry(self.frame, textvariable=self.resample)
+            self.diff_thresh_widg = ttk.Entry(self.frame, textvariable=self.diff_thresh)
+            label1 = ttk.Label(self.frame, text='Resample:')
+            label2 = ttk.Label(self.frame, text='Threshold:')
+            b1 = tk.Radiobutton(self.frame, text='Baseline', variable=self.bltest, value=CONTROL)
+            b2 = tk.Radiobutton(self.frame, text='Test', variable=self.bltest, value=TEST)
 
             self.lb.place(x=5, y=5)
             self.resample_widg.pack(side=tk.BOTTOM)
+            label1.pack(side=tk.BOTTOM)
+            self.diff_thresh_widg.pack(side=tk.BOTTOM)
+            label2.pack(side=tk.BOTTOM)
             self.save_widg.pack(side=tk.BOTTOM)
             self.show_widg.pack(side=tk.BOTTOM)
             self.ok.pack(side=tk.BOTTOM)
+            b1.pack(side=tk.RIGHT)
+            b2.pack(side=tk.RIGHT)
 
         def done_select(self, val):
             idxs = map(int, self.lb.curselection())
@@ -369,17 +407,18 @@ if __name__=='__main__':
             save_tracking_video = self.save.get()
             show_live_tracking = self.show.get()
             resample = int(self.resample.get())
+            diff_thresh = int(self.diff_thresh.get())
+            mode = self.bltest.get()
             for mouse in mice:
-                for mode in [CONTROL, TEST]:
-                    self.status1.set('Now processing mouse \'%s\', %s trial.'%(mouse, {CONTROL:'control', TEST:'test'}[mode]))
-                    self.frame.update()
-                    try:
-                        mt = MouseTracker(mouse=mouse, mode=mode, data_directory=data_dir, resample=resample)
-                        mt.run(show=show_live_tracking, save=save_tracking_video, tk_var_frame=(self.status2, self.frame))
-                        a = Analysis(mouse, mode, data_directory=data_dir)
-                        a.make_fig1()
-                    except:
-                        pass
+                self.status1.set('Now processing mouse \'%s\', %s trial.'%(mouse, {CONTROL:'baseline', TEST:'test'}[mode]))
+                self.frame.update()
+                try:
+                    mt = MouseTracker(mouse=mouse, mode=mode, data_directory=data_dir, resample=resample, diff_thresh=diff_thresh)
+                    mt.run(show=show_live_tracking, save=save_tracking_video, tk_var_frame=(self.status2, self.frame))
+                    a = Analysis(mouse, mode, data_directory=data_dir)
+                    a.make_fig1()
+                except:
+                    pass
             self.parent.destroy()
     def parse_mice_names(items):
         good = []
@@ -394,7 +433,7 @@ if __name__=='__main__':
     
     root = tk.Tk()
     root.geometry("400x400+200+100")
-    data_dir = askdirectory(parent=root, mustexist=True, title='Select directory containing data folders.')
+    data_dir = askdirectory(parent=root, initialdir='/', mustexist=True, title='Select directory containing data folders.')
     if not data_dir:
         sys.exit(0)
     options = [o for o in os.listdir(data_dir) if os.path.isdir(os.path.join(data_dir,o))]
