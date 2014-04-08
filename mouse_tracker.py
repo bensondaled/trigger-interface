@@ -151,15 +151,17 @@ class MouseTracker(object):
         self.results['centers_all'] = []
         self.results['left'] = 0
         self.results['right'] = 0
+        self.results['middle'] = 0
         self.results['left_assumed'] = 0
         self.results['right_assumed'] = 0
+        self.results['middle_assumed'] = 0
         self.results['skipped'] = 0
         self.results['heat'] = np.zeros(np.shape(self.background))
         self.results['n_frames'] = 0
         self.results['params'] = [self.diff_thresh, self.kernel, self.translation_max, self.resample]
         self.results['params_key'] = ['diff_thresh','kernel','translation_max','resample']
 
-        self.path_l, self.path_r, self.rooms_mask, self.paths_ignore, self.last_center = self.get_pt_selections()
+        self.path_l, self.path_r, self.path_c, self.rooms_mask, self.paths_ignore, self.last_center = self.get_pt_selections()
     def end(self):
         np.savez(os.path.join(self.trial_dir,'%s_tracking'%self.trial_name), **self.results)
         savemat(os.path.join(self.trial_dir,'%s_tracking'%self.trial_name), self.results)
@@ -175,7 +177,8 @@ class MouseTracker(object):
             pts_mouse = pts['pts_mouse']
             regions_ignore = pts['regions_ignore']
         except:
-            found = False
+            found_rooms = False
+            found_ignore = False
             for sf in self.selection_from:
                 fh = FileHandler(self.data_dir, sf)
                 s_trial_name = fh[self.mode][TRIAL][NAME]
@@ -183,57 +186,65 @@ class MouseTracker(object):
                 
                 try:
                     pts = np.load(os.path.join(s_trial_dir, '%s_selections.npz'%s_trial_name))
-                    pts_l = pts['pts_l']
-                    pts_r = pts['pts_r']
-                    pts_mouse = pts['pts_mouse']
-                    regions_ignore = pts['regions_ignore']
                     
-                    plimshow(first, cmap=mpl_cm.Greys_r)
-                    title('Good? If so, click image, otherwise, close window.')
-                    scatter(pts_l[:,0], pts_l[:,1], c='b', marker='o')
-                    scatter(pts_r[:,0], pts_r[:,1], c='r', marker='o')
-                    scatter(pts_mouse[:,0], pts_mouse[:,1], c='g', marker='o')
-                    [scatter(ptsi[:,0], ptsi[:,1], c='k',marker='x') for ptsi in regions_ignore]
+                    if not found_rooms:
+                        pts_l = pts['pts_l']
+                        pts_r = pts['pts_r']
+                        pts_c = pts['pts_c']
+                        
+                        plimshow(first, cmap=mpl_cm.Greys_r)
+                        title('Good room corners? If so, click image, otherwise, close window.')
+                        scatter(pts_l[:,0], pts_l[:,1], c='b', marker='o')
+                        scatter(pts_r[:,0], pts_r[:,1], c='r', marker='o')
+                        scatter(pts_c[:,0], pts_c[:,1], c='g', marker='o')
 
-                    use = ginput(1)
-                    close()
-                    if use.any():
-                        found = True
+                        use_rooms = ginput(1)
+                        close()
+                        if use_rooms.any():
+                            found_rooms = True
+                    if not found_ignore:
+                        plimshow(first, cmap=mpl_cm.Greys_r)
+                        title('Good ignore regions? If so, click image, otherwise, close window.')
+                        regions_ignore = pts['regions_ignore']
+                        [scatter(ptsi[:,0], ptsi[:,1], c='k',marker='x') for ptsi in regions_ignore]
+                        use_ignore = ginput(1)
+                        close()
+                        if use_ignore.any():
+                            found_ignore = True
+
+                    if found_rooms and found_ignore:
                         break
                 except:
                     pass
-            if not found:
-                plimshow(first, cmap=mpl_cm.Greys_r)
+                
+            plimshow(first, cmap=mpl_cm.Greys_r)
+            title("Select mouse (4 pts).")
+            pts_mouse = ginput(4)
+            if not found_rooms:
                 title("Select left room- around the corners in order.")
                 pts_l = ginput(4)
                 title("Select right room- around the corners in order.")
                 pts_r = ginput(4)
-                title("Select mouse.")
-                pts_mouse = ginput(4)
-                
+                title("Select middle room- around the corners in order.")
+                pts_c = ginput(4)
+            if not found_ignore: 
                 valid,frame = self.get_frame(self.mov)
                 diff = absdiff(frame,self.background)
                 _, diff = threshold(diff, self.diff_thresh, 1, THRESH_BINARY)
                 plimshow(np.ma.masked_where(diff==0, diff), cmap=mpl_cm.jet)
                 regions_ignore = []
                 pts_ignore = [1]
-                title("Select cups and any colored regions in the rooms that are not the mouse. (8pts per)")
+                title("Select cups and any other region to ignore. (10 pts per)")
                 while True:
-                    pts_ignore = ginput(8)
+                    pts_ignore = ginput(10)
                     if not pts_ignore.any():
                         break
                     regions_ignore.append(pts_ignore)
                 regions_ignore = np.array(regions_ignore)
-                close()
-            np.savez(os.path.join(self.trial_dir, '%s_selections'%self.trial_name), pts_l=pts_l, pts_r=pts_r, pts_mouse=pts_mouse, regions_ignore=regions_ignore)
-        path_l, path_r = [mpl_path.Path(pts) for pts in [pts_l,pts_r]]
+            close()
+            np.savez(os.path.join(self.trial_dir, '%s_selections'%self.trial_name), pts_l=pts_l, pts_r=pts_r, pts_c=pts_c, pts_mouse=pts_mouse, regions_ignore=regions_ignore)
+        path_l, path_r, path_c = [mpl_path.Path(pts) for pts in [pts_l,pts_r,pts_c]]
         last_center = np.round(np.mean(pts_mouse, axis=0)).astype(int)
-        allpoints = np.append(pts_l,pts_r,axis=0)
-        left_border = np.min([i[0] for i in allpoints])
-        right_border = np.max([i[0] for i in allpoints])
-        top_border = np.min([i[1] for i in allpoints])
-        bottom_border = np.max([i[1] for i in allpoints])
-        allpath = mpl_path.Path([[left_border,top_border],[right_border,top_border],[right_border,bottom_border],[left_border,bottom_border]])
 
         paths_ignore = [mpl_path.Path(pts) for pts in regions_ignore]
 
@@ -241,9 +252,9 @@ class MouseTracker(object):
         for row in range(self.height):
             for col in range(self.width):
                 pt = [col,row]
-                rooms_mask[row][col] = allpath.contains_point(pt)
+                rooms_mask[row][col] = path_l.contains_point(pt) or path_r.contains_point(pt) or path_c.contains_point(pt)
 
-        return (path_l, path_r, rooms_mask, paths_ignore, last_center)
+        return (path_l, path_r, path_c, rooms_mask, paths_ignore, last_center)
     def load_background(self):
         try:
             bg = np.load(self.background_dir+'/%s_background.npz'%self.background_name)
@@ -323,6 +334,8 @@ class MouseTracker(object):
                     self.results['left_assumed']+=1
                 if self.path_r.contains_point(center):
                     self.results['right_assumed']+=1
+                if self.path_c.contains_point(center):
+                    self.results['middle_assumed']+=1
             else:
                 chosen = possible[np.argmax([contourArea(c) for c in possible])]   
                 center = contour_center(chosen)
@@ -332,6 +345,8 @@ class MouseTracker(object):
                     self.results['left']+=1
                 if self.path_r.contains_point(center):
                     self.results['right']+=1
+                if self.path_c.contains_point(center):
+                    self.results['middle']+=1
             self.results['centers_all'].append(center) 
             #display
             if show or save:
@@ -387,7 +402,7 @@ if __name__=='__main__':
             self.frame.pack(fill=tk.BOTH, expand=1)
 
             self.lb = tk.Listbox(self.frame, selectmode=tk.EXTENDED, exportselection=0)
-            self.lb2 = tk.Listbox(self.frame, selectmode=tk.EXTENDED, exportselection=0)
+            self.lb2 = tk.Listbox(self.frame, selectmode=tk.MULTIPLE, exportselection=0)
             for i in options:
                 self.lb.insert(tk.END, i)
                 self.lb2.insert(tk.END, i)
@@ -406,17 +421,20 @@ if __name__=='__main__':
             b1 = tk.Radiobutton(self.frame, text='Baseline', variable=self.bltest, value=CONTROL)
             b2 = tk.Radiobutton(self.frame, text='Test', variable=self.bltest, value=TEST)
 
-            self.lb.place(x=5, y=5)
-            self.lb2.pack(side=tk.RIGHT)
-            self.resample_widg.pack(side=tk.BOTTOM)
-            label1.pack(side=tk.BOTTOM)
-            self.diff_thresh_widg.pack(side=tk.BOTTOM)
-            label2.pack(side=tk.BOTTOM)
-            self.save_widg.pack(side=tk.BOTTOM)
-            self.show_widg.pack(side=tk.BOTTOM)
-            self.ok.pack(side=tk.BOTTOM)
-            b1.pack(side=tk.RIGHT)
-            b2.pack(side=tk.RIGHT)
+            ttk.Label(self.frame, text="Mice to process:").grid(row=0, column=0)
+            self.lb.grid(row=1, column=0)
+            ttk.Label(self.frame, text="Attempt selections from:").grid(row=0, column=1)
+            self.lb2.grid(row=1, column=1)
+            self.resample_widg.grid(row=2, column=1)
+            label1.grid(row=2, column=0)
+            self.diff_thresh_widg.grid(row=3, column=1)
+            label2.grid(row=3, column=0)
+            self.save_widg.grid(row=4, column=1)
+            self.show_widg.grid(row=4, column=0)
+            ttk.Label(self.frame, text='Trial type:').grid(row=5,column=0)
+            b1.grid(row=5,column=1)
+            b2.grid(row=5,column=2)
+            self.ok.grid(row=6)
 
         def done_select(self, val):
             idxs = map(int, self.lb.curselection())
@@ -459,7 +477,8 @@ if __name__=='__main__':
                     mt.run(show=show_live_tracking, save=save_tracking_video, tk_var_frame=(self.status2, self.frame))
                     a = Analysis(mouse, mode, data_directory=data_dir)
                     a.make_fig1()
-                    select_from += [mouse]
+                    if mouse not in select_from:
+                        select_from += [mouse]
                 except:
                     pass
             self.parent.destroy()
