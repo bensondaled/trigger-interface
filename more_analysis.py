@@ -1,3 +1,5 @@
+#make heatmaps from multiple mice
+
 from mouse_tracker import Analysis
 from cv2 import resize
 from scipy.ndimage.filters import gaussian_filter as gf

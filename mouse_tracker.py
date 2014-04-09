@@ -63,6 +63,19 @@ class Analysis(object):
         self.background_dir = fh[mode][BACKGROUND][DIR]
         self.trial_name = fh[mode][TRIAL][NAME]
         self.trial_dir = fh[mode][TRIAL][DIR]
+    def get_times(self):
+        time = json.loads(open(os.path.join(self.trial_dir, '%s-timestamps.json'%self.trial_name),'r').read())[0]
+        tracking = np.load(os.path.join(self.trial_dir,'%s_tracking.npz'%self.trial_name))
+        nframes = tracking['n_frames']
+        left = tracking['left'] + tracking['left_assumed']
+        right = tracking['right'] + tracking['right_assumed']
+        middle = tracking['middle'] + tracking['middle_assumed']
+        ca = tracking['centers_all']
+        c = tracking['centers']
+        resample = tracking['params'][np.where(tracking['params_key']=='resample')]
+
+        return (time, nframes, left, right, middle, resample, c, ca)
+        
     def make_fig1(self):
         bg = np.load(os.path.join(self.background_dir,'%s_background.npz'%self.background_name))
         background = bg['image']
