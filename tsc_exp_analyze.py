@@ -71,35 +71,26 @@ class Analysis(object):
         self.background_dir = fh[mode][BACKGROUND][DIR]
         self.trial_name = fh[mode][TRIAL][NAME]
         self.trial_dir = fh[mode][TRIAL][DIR]
-    def get_times(self):
+    def get_time(self):
         time = json.loads(open(os.path.join(self.trial_dir, '%s-timestamps.json'%self.trial_name),'r').read())[0]
+        return time
+    def get_tracking(self):
         tracking = np.load(os.path.join(self.trial_dir,'%s_tracking.npz'%self.trial_name))
-        nframes = tracking['n_frames']
-        left = tracking['left'] + tracking['left_assumed']
-        right = tracking['right'] + tracking['right_assumed']
-        middle = tracking['middle'] + tracking['middle_assumed']
-        ca = tracking['centers_all']
-        c = tracking['centers']
-        resample = tracking['params'][np.where(tracking['params_key']=='resample')]
-
-        return (time, nframes, left, right, middle, resample, c, ca)
-        
-    def make_fig1(self):
+        return tracking
+    def get_selections(self):
+        sel = np.load(self.trial_dir+'/%s_selections.npz'%self.trial_name)
+        return sel
+    def get_background(self):
         bg = np.load(os.path.join(self.background_dir,'%s_background.npz'%self.background_name))
-        background = bg['image']
-
-        tracking = np.load(os.path.join(self.trial_dir,'%s_tracking.npz'%self.trial_name))
-        track = tracking['heat']
-        nframes = tracking['n_frames']
-        skipped = tracking['skipped']
-        frames = nframes-skipped
-        centers = tracking['centers']
+        return bg
+    def get_bg_tr_cropped(self):
+        bg = self.get_background()['image']
+        tracking = self.get_tracking()['heat']
+        pts = self.get_selections()
         
-        height, width = np.shape(background)
-        pts = np.load(self.trial_dir+'/%s_selections.npz'%self.trial_name)
+        height, width = np.shape(bg)
         pts_l = pts['pts_l']
         pts_r = pts['pts_r']
-        path_l, path_r = [mpl_path.Path(pts) for pts in [pts_l,pts_r]]
         allpoints = np.append(pts_l,pts_r,axis=0)
         left = np.min([i[0] for i in allpoints])
         right = np.max([i[0] for i in allpoints])
@@ -108,6 +99,9 @@ class Analysis(object):
 
         background_crop = background[top:bottom, left:right]
         track_crop = track[top:bottom, left:right]
+
+        return (background_crop, track_crop)
+    def make_fig1(self):
 
         #leftmost = pts_l[np.argsort([p[0] for p in pts_l])][:2]
         #rightmost = pts_r[np.argsort([p[0] for p in pts_r])][-2:]
@@ -526,35 +520,34 @@ if __name__=='__main__':
     frame = MainFrame(root, options=options)
     root.mainloop()
    
-def analysis1():
-
-    #make heatmaps from multiple mice
-    from cv2 import resize
+def analysis1(mice, datadir):
     from scipy.ndimage.filters import gaussian_filter as gf
-    import numpy as np
-    import pylab as pl
-    from matplotlib import cm as mpl_cm
-
-    mice = ['Black6_9', 'Black6_10', 'Black6_11', 'Black6_7', 'Black6_8',  'Black6_13', 'Black6_14', 'Black6_15']
 
     sigma = 1.5
-
     results = []
+    datadir = '.'
+    mice = ['Black6_5']
 
-    for mode in [0,1]:
+    BASELINE = 0
+    TEST = 1
+
+    IMG = 0
+    HEAT = 1
+
+    for mode in [BASELINE, TEST]:
         heats = []
         pics = []
 
         for mouse in mice:
-            a = Analysis(mouse, mode, data_directory='/Volumes/COMPATIBLE/April4-data')
-            pic,heat,nframes,centers = a.make_fig1()
-            heats.append(heat/nframes)
-            pics.append(pic)
+            a = Analysis(mouse, mode, data_directory=datadir)
+            bg,heat = a.get_bg_tr_cropped()
+            heats.append(heat)
+            pics.append(bg)
 
         minheight, minwidth = min([np.shape(h)[0] for h in heats]), min([np.shape(h)[1] for h in heats])
         for idx,h in enumerate(heats):
-            heats[idx] = resize(h, (minwidth,minheight))
-            pics[idx] = resize(pics[idx], (minwidth,minheight))
+            heats[idx] = cv2.resize(h, (minwidth,minheight))
+            pics[idx] = cv2.resize(pics[idx], (minwidth,minheight))
 
         heat = np.dstack(heats)
         img = np.dstack(pics)
@@ -564,14 +557,16 @@ def analysis1():
         heat = heat/np.max(heat)
         results.append([img,heat])
 
-    pl.figure()
-    pl.imshow(results[0][0], cmap=mpl_cm.Greys_r)
-    pl.imshow(np.ma.masked_where(results[0][1]<np.percentile(results[0][1],50),results[0][1]), cmap=mpl_cm.jet)
-    #pl.imshow(results[0][1])
-    pl.figure()
-    pl.imshow(results[1][0], cmap=mpl_cm.Greys_r)
-    pl.imshow(np.ma.masked_where(results[1][1]<np.percentile(results[1][1],70),results[1][1]), cmap=mpl_cm.jet)
-    #pl.imshow(results[1][1])
+        pl.figure()
+        pl.imshow(results[BASELINE][IMG], cmap=mpl_cm.Greys_r)
+        pl.imshow(np.ma.masked_where(results[BASELINE][HEAT]<np.percentile(results[BASELINE][HEAT],50),results[BASELINE][HEAT]), cmap=mpl_cm.jet)
+        #pl.imshow(results[0][1])
+        pl.figure()
+        pl.imshow(results[TEST][IMG], cmap=mpl_cm.Greys_r)
+        pl.imshow(np.ma.masked_where(results[TEST][HEAT]<np.percentile(results[TEST][HEAT],70),results[TEST][HEAT]), cmap=mpl_cm.jet)
+        #pl.imshow(results[1][1])
+
+
 
 def analysis2():
      
