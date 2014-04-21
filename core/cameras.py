@@ -7,10 +7,9 @@ import pylab as pl
 import json
 import sys
 
-BW = 0
-COLOR = 1
-
 class Camera(object):
+    BW = 0
+    COLOR = 1
     def __init__(self, idx=0, resolution=(320,240), frame_rate=50, color_mode=BW):
         self.resolution = resolution
         self.frame_rate = frame_rate
@@ -30,7 +29,7 @@ class Camera(object):
         self.vc.read()
     def read(self):
         success,frame = self.vc.read()
-        if self.color_mode==BW:
+        if self.color_mode==self.BW:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         return (frame.astype(np.uint8), time.time())
     def release(self):

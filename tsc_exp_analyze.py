@@ -1,23 +1,31 @@
-from scipy.io import savemat
-from tkFileDialog import askopenfilename, askdirectory
-import numpy as np
-from matplotlib import path as mpl_path
-import matplotlib.cm as mpl_cm
-from progressbar import *
+#natives
 import sys
 import os
 import json
+
+#numpy & scipy
+from scipy.io import savemat
+import numpy as np
+
+#matplotlib
+from matplotlib import path as mpl_path
 from pylab import ion, title, close,scatter
 from pylab import imshow as plimshow
 from pylab import ginput as plginput
 from pylab import savefig as plsavefig
 from pylab import close as plclose
 ion()
+
+#tkinter
+from tkFileDialog import askopenfilename, askdirectory
+import ttk
+import Tkinter as tk
+import matplotlib.cm as mpl_cm
+
+#opencv
 from cv2 import getRotationMatrix2D, warpAffine, namedWindow, VideoCapture, destroyAllWindows, cvtColor, GaussianBlur, VideoWriter, absdiff, threshold, THRESH_BINARY, Canny, findContours,  RETR_EXTERNAL, CHAIN_APPROX_TC89_L1, contourArea, circle, waitKey
 from cv2 import imshow as cv2imshow
 from cv2.cv import CV_RGB2GRAY, CV_FOURCC, CV_GRAY2RGB
-import ttk
-import Tkinter as tk
 
 CONTROL = 0
 TEST = 1
@@ -393,108 +401,109 @@ class MouseTracker(object):
             writer.release()
         self.end()
 
-if __name__=='__main__':
     
-    class MainFrame(object):
-        def __init__(self, parent, options=[]):
-            self.parent = parent
-            self.frame = ttk.Frame(self.parent)
-            
-            self.selection = None
-            self.show = tk.IntVar()
-            self.save = tk.IntVar()
-            self.resample = tk.StringVar()
-            self.resample.set('5')
-            self.diff_thresh = tk.StringVar()
-            self.diff_thresh.set('80')
-            self.bltest = tk.IntVar()
-            
-            self.initUI(options)
-        def initUI(self, options):
-            self.parent.title('Select Mouse')
-            self.frame.pack(fill=tk.BOTH, expand=1)
+class MainFrame(object):
+    def __init__(self, parent, options=[]):
+        self.parent = parent
+        self.frame = ttk.Frame(self.parent)
+        
+        self.selection = None
+        self.show = tk.IntVar()
+        self.save = tk.IntVar()
+        self.resample = tk.StringVar()
+        self.resample.set('5')
+        self.diff_thresh = tk.StringVar()
+        self.diff_thresh.set('80')
+        self.bltest = tk.IntVar()
+        
+        self.initUI(options)
+    def initUI(self, options):
+        self.parent.title('Select Mouse')
+        self.frame.pack(fill=tk.BOTH, expand=1)
 
-            self.lb = tk.Listbox(self.frame, selectmode=tk.EXTENDED, exportselection=0)
-            self.lb2 = tk.Listbox(self.frame, selectmode=tk.MULTIPLE, exportselection=0)
-            for i in options:
-                self.lb.insert(tk.END, i)
-                self.lb2.insert(tk.END, i)
-            self.lb2.select_set(0, len(options)-1)
+        self.lb = tk.Listbox(self.frame, selectmode=tk.EXTENDED, exportselection=0)
+        self.lb2 = tk.Listbox(self.frame, selectmode=tk.MULTIPLE, exportselection=0)
+        for i in options:
+            self.lb.insert(tk.END, i)
+            self.lb2.insert(tk.END, i)
+        self.lb2.select_set(0, len(options)-1)
 
-            self.ok = ttk.Button(self.frame, text='OK')
-            self.ok.bind("<Button-1>", self.done_select)
-            self.ok.bind("<Return>", self.done_select)
+        self.ok = ttk.Button(self.frame, text='OK')
+        self.ok.bind("<Button-1>", self.done_select)
+        self.ok.bind("<Return>", self.done_select)
 
-            self.show_widg = ttk.Checkbutton(self.frame, text='Show tracking', variable=self.show)
-            self.save_widg = ttk.Checkbutton(self.frame, text='Save tracking video', variable=self.save)
-            self.resample_widg = ttk.Entry(self.frame, textvariable=self.resample)
-            self.diff_thresh_widg = ttk.Entry(self.frame, textvariable=self.diff_thresh)
-            label1 = ttk.Label(self.frame, text='Resample:')
-            label2 = ttk.Label(self.frame, text='Threshold:')
-            b1 = tk.Radiobutton(self.frame, text='Baseline', variable=self.bltest, value=CONTROL)
-            b2 = tk.Radiobutton(self.frame, text='Test', variable=self.bltest, value=TEST)
+        self.show_widg = ttk.Checkbutton(self.frame, text='Show tracking', variable=self.show)
+        self.save_widg = ttk.Checkbutton(self.frame, text='Save tracking video', variable=self.save)
+        self.resample_widg = ttk.Entry(self.frame, textvariable=self.resample)
+        self.diff_thresh_widg = ttk.Entry(self.frame, textvariable=self.diff_thresh)
+        label1 = ttk.Label(self.frame, text='Resample:')
+        label2 = ttk.Label(self.frame, text='Threshold:')
+        b1 = tk.Radiobutton(self.frame, text='Baseline', variable=self.bltest, value=CONTROL)
+        b2 = tk.Radiobutton(self.frame, text='Test', variable=self.bltest, value=TEST)
 
-            ttk.Label(self.frame, text="Mice to process:").grid(row=0, column=0)
-            self.lb.grid(row=1, column=0)
-            ttk.Label(self.frame, text="Attempt selections from:").grid(row=0, column=1)
-            self.lb2.grid(row=1, column=1)
-            self.resample_widg.grid(row=2, column=1)
-            label1.grid(row=2, column=0)
-            self.diff_thresh_widg.grid(row=3, column=1)
-            label2.grid(row=3, column=0)
-            self.save_widg.grid(row=4, column=1)
-            self.show_widg.grid(row=4, column=0)
-            ttk.Label(self.frame, text='Trial type:').grid(row=5,column=0)
-            b1.grid(row=5,column=1)
-            b2.grid(row=5,column=2)
-            self.ok.grid(row=6)
+        ttk.Label(self.frame, text="Mice to process:").grid(row=0, column=0)
+        self.lb.grid(row=1, column=0)
+        ttk.Label(self.frame, text="Attempt selections from:").grid(row=0, column=1)
+        self.lb2.grid(row=1, column=1)
+        self.resample_widg.grid(row=2, column=1)
+        label1.grid(row=2, column=0)
+        self.diff_thresh_widg.grid(row=3, column=1)
+        label2.grid(row=3, column=0)
+        self.save_widg.grid(row=4, column=1)
+        self.show_widg.grid(row=4, column=0)
+        ttk.Label(self.frame, text='Trial type:').grid(row=5,column=0)
+        b1.grid(row=5,column=1)
+        b2.grid(row=5,column=2)
+        self.ok.grid(row=6)
 
-        def done_select(self, val):
-            idxs = map(int, self.lb.curselection())
-            values = [self.lb.get(idx) for idx in idxs]
-            self.selection = values
-            idxs2 = map(int, self.lb2.curselection())
-            values2 = [self.lb2.get(idx) for idx in idxs2]
-            self.selection2 = values2
+    def done_select(self, val):
+        idxs = map(int, self.lb.curselection())
+        values = [self.lb.get(idx) for idx in idxs]
+        self.selection = values
+        idxs2 = map(int, self.lb2.curselection())
+        values2 = [self.lb2.get(idx) for idx in idxs2]
+        self.selection2 = values2
 
-            self.frame.destroy()
+        self.frame.destroy()
 
-            self.main()
-        def main(self):
-            self.parent.title('Status')
-            self.frame = ttk.Frame(self.parent, takefocus=True)
-            self.frame.pack(fill=tk.BOTH, expand=1)
-            self.todo = tk.StringVar()
-            self.status1 = tk.StringVar()
-            self.status2 = tk.StringVar()
-            label_todo = ttk.Label(self.frame, textvariable=self.todo)
-            label1 = ttk.Label(self.frame, textvariable=self.status1)
-            label2 = ttk.Label(self.frame, textvariable=self.status2)
-            self.todo.set('Mice:\n'+'\n'.join(self.selection))
-            label2.pack(side=tk.TOP)
-            label1.pack(side=tk.TOP)
-            label_todo.pack(side=tk.BOTTOM)
+        self.main()
+    def main(self):
+        self.parent.title('Status')
+        self.frame = ttk.Frame(self.parent, takefocus=True)
+        self.frame.pack(fill=tk.BOTH, expand=1)
+        self.todo = tk.StringVar()
+        self.status1 = tk.StringVar()
+        self.status2 = tk.StringVar()
+        label_todo = ttk.Label(self.frame, textvariable=self.todo)
+        label1 = ttk.Label(self.frame, textvariable=self.status1)
+        label2 = ttk.Label(self.frame, textvariable=self.status2)
+        self.todo.set('Mice:\n'+'\n'.join(self.selection))
+        label2.pack(side=tk.TOP)
+        label1.pack(side=tk.TOP)
+        label_todo.pack(side=tk.BOTTOM)
 
-            mice = self.selection
-            select_from = self.selection2
-            save_tracking_video = self.save.get()
-            show_live_tracking = self.show.get()
-            resample = int(self.resample.get())
-            diff_thresh = int(self.diff_thresh.get())
-            mode = self.bltest.get()
-            for mouse in mice:
-                self.status1.set('Now processing mouse \'%s\', %s trial.'%(mouse, {CONTROL:'baseline', TEST:'test'}[mode]))
-                self.frame.update()
-                try:
-                    mt = MouseTracker(mouse=mouse, mode=mode, data_directory=data_dir, resample=resample, diff_thresh=diff_thresh, selection_from=select_from)
-                    mt.run(show=show_live_tracking, save=save_tracking_video, tk_var_frame=(self.status2, self.frame))
-                    a = Analysis(mouse, mode, data_directory=data_dir)
-                    a.make_fig1()
-                    if mouse not in select_from:
-                        select_from += [mouse]
-                except:
-                    pass
-            self.parent.destroy()
+        mice = self.selection
+        select_from = self.selection2
+        save_tracking_video = self.save.get()
+        show_live_tracking = self.show.get()
+        resample = int(self.resample.get())
+        diff_thresh = int(self.diff_thresh.get())
+        mode = self.bltest.get()
+        for mouse in mice:
+            self.status1.set('Now processing mouse \'%s\', %s trial.'%(mouse, {CONTROL:'baseline', TEST:'test'}[mode]))
+            self.frame.update()
+            try:
+                mt = MouseTracker(mouse=mouse, mode=mode, data_directory=data_dir, resample=resample, diff_thresh=diff_thresh, selection_from=select_from)
+                mt.run(show=show_live_tracking, save=save_tracking_video, tk_var_frame=(self.status2, self.frame))
+                a = Analysis(mouse, mode, data_directory=data_dir)
+                a.make_fig1()
+                if mouse not in select_from:
+                    select_from += [mouse]
+            except:
+                pass
+        self.parent.destroy()
+
+if __name__=='__main__':
     def parse_mice_names(items):
         good = []
         for item in items:
@@ -517,4 +526,86 @@ if __name__=='__main__':
     frame = MainFrame(root, options=options)
     root.mainloop()
    
+def analysis1():
+
+    #make heatmaps from multiple mice
+    from cv2 import resize
+    from scipy.ndimage.filters import gaussian_filter as gf
+    import numpy as np
+    import pylab as pl
+    from matplotlib import cm as mpl_cm
+
+    mice = ['Black6_9', 'Black6_10', 'Black6_11', 'Black6_7', 'Black6_8',  'Black6_13', 'Black6_14', 'Black6_15']
+
+    sigma = 1.5
+
+    results = []
+
+    for mode in [0,1]:
+        heats = []
+        pics = []
+
+        for mouse in mice:
+            a = Analysis(mouse, mode, data_directory='/Volumes/COMPATIBLE/April4-data')
+            pic,heat,nframes,centers = a.make_fig1()
+            heats.append(heat/nframes)
+            pics.append(pic)
+
+        minheight, minwidth = min([np.shape(h)[0] for h in heats]), min([np.shape(h)[1] for h in heats])
+        for idx,h in enumerate(heats):
+            heats[idx] = resize(h, (minwidth,minheight))
+            pics[idx] = resize(pics[idx], (minwidth,minheight))
+
+        heat = np.dstack(heats)
+        img = np.dstack(pics)
+        img = np.mean(img, axis=2)
+        avg = np.mean(heat, axis=2)
+        heat = gf(avg,sigma)
+        heat = heat/np.max(heat)
+        results.append([img,heat])
+
+    pl.figure()
+    pl.imshow(results[0][0], cmap=mpl_cm.Greys_r)
+    pl.imshow(np.ma.masked_where(results[0][1]<np.percentile(results[0][1],50),results[0][1]), cmap=mpl_cm.jet)
+    #pl.imshow(results[0][1])
+    pl.figure()
+    pl.imshow(results[1][0], cmap=mpl_cm.Greys_r)
+    pl.imshow(np.ma.masked_where(results[1][1]<np.percentile(results[1][1],70),results[1][1]), cmap=mpl_cm.jet)
+    #pl.imshow(results[1][1])
+
+def analysis2():
+     
+    #get times for multple mice
+
+    import numpy as np
+    import pylab as pa
+    from csv import DictWriter as DW
+
+    mice = ['Black6_9', 'Black6_10', 'Black6_11', 'Black6_7', 'Black6_8',  'Black6_13', 'Black6_14', 'Black6_15']
+
+    results = DW(open('/Users/Benson/Desktop/times.csv','w'), fieldnames=['Mouse','trial-type','left\%','right\%','middle\%','left', "right",'middle','total'])
+    results.writeheader()
+
+    for mouse in mice:
+        for mode in [0,1]:
+            a = Analysis(mouse, mode, data_directory='/Volumes/COMPATIBLE/April4-data')
+            time, nframes, left, right, middle, resample, c, ca =  a.get_times()
+            time = np.array(time)
+            Ts = np.mean(time[1:]-time[:-1])
+            newTs = float(Ts * resample)
+            dic = {}
+            left = float(left)
+            right = float(right)
+            middle=float(middle)
+            total = (left+right+middle)*newTs
+            dic['Mouse'] = mouse
+            dic['trial-type'] = ['baseline','test'][mode]
+            dic['left'] = left*newTs
+            dic['right'] = right*newTs
+            dic['middle'] = middle*newTs
+            dic['total'] = total
+            dic['left\%'] = left*newTs/total*100.
+            dic['right\%'] = right*newTs/total*100.
+            dic['middle\%'] = middle*newTs/total*100.
+            results.writerow(dic)
 

@@ -1,7 +1,6 @@
-from monitor import Monitor
-from cameras import Camera, BW, COLOR
+from core.monitor import Monitor
+from core.cameras import Camera, BW, COLOR
 import numpy as np
-from playback import Playback as PB
 import os
 
 name = None

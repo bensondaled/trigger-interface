@@ -1,4 +1,7 @@
-import PyDAQmx as pydaq
+try:
+    import PyDAQmx as pydaq
+except:
+    import csv as pydaq
 import numpy as np
 
 class Trigger(object):
@@ -46,5 +49,5 @@ class DAQ(object):
     def metadata(self):
         md = {}
         md['port'] = self.port
-
+        
         return md
