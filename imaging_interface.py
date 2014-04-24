@@ -306,8 +306,31 @@ if __name__=='__main__':
     cam =  Camera(idx=0, resolution=(320,240), frame_rate=20, color_mode=Camera.BW)
     CS = Trigger(msg=[0,0,1,1], duration=5.0, name='CS')
     US = Trigger(msg=[0,0,0,1], duration=5.0, name='US')
-    trigger_cycle = TriggerCycle(triggers=[CS, US])
+    trigger_cycle = TriggerCycle(triggers=[CS, US, CS, US])
     daq = DAQ()
     
     exp = Experiment(camera=cam, daq=DAQ(), trigger_cycle=trigger_cycle, n_trials=20)
     exp.run() #'q' can always be used to end the run early. don't kill the process
+
+
+
+# give a trigger with a command
+# display average eyelid after triggers
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

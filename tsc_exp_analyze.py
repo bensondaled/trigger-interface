@@ -572,20 +572,22 @@ def analysis1(mice, datadir, sigma=1.5, norm=True, show_perc=True):
 
     pl.figure()
     toshow = results[BASELINE][IMG]
-    pl.imshow(toshow, cmap=mpl_cm.Greys_r)
+    #pl.imshow(toshow, cmap=mpl_cm.Greys_r)
     toshow = results[BASELINE][HEAT]
     if show_perc:
         toshow = np.ma.masked_where(toshow<np.percentile(toshow,50),toshow)
-    pl.imshow(toshow , cmap=mpl_cm.jet)
+    #pl.imshow(toshow , cmap=mpl_cm.jet)
     #pl.imshow(results[0][1])
     pl.figure()
     toshow = results[TEST][IMG]
-    pl.imshow(toshow, cmap=mpl_cm.Greys_r)
+    #pl.imshow(toshow, cmap=mpl_cm.Greys_r)
     toshow = results[TEST][HEAT]
     if show_perc:
         toshow = np.ma.masked_where(toshow<np.percentile(toshow,70),toshow)
-    pl.imshow(toshow , cmap=mpl_cm.jet)
+    #pl.imshow(toshow , cmap=mpl_cm.jet)
     #pl.imshow(results[1][1])
+
+    return results
 
 
 
