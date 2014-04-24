@@ -5,10 +5,11 @@ except:
 import numpy as np
 
 class Trigger(object):
-    def __init__(self, msg=[], duration=1.0):
+    def __init__(self, msg=[], duration=1.0, name='noname'):
         self.duration = duration
         self._msg = None
         self.msg = msg
+        self.name = name
 
     @property
     def msg(self):
@@ -21,6 +22,7 @@ class Trigger(object):
         md = {}
         md['duration'] = self.duration
         md['msg'] = str(self.msg)
+        md['name'] = self.name
         return md
 
 class DAQ(object):

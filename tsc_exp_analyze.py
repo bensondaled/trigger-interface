@@ -23,7 +23,7 @@ import Tkinter as tk
 import matplotlib.cm as mpl_cm
 
 #opencv
-from cv2 import getRotationMatrix2D, warpAffine, namedWindow, VideoCapture, destroyAllWindows, cvtColor, GaussianBlur, VideoWriter, absdiff, threshold, THRESH_BINARY, Canny, findContours,  RETR_EXTERNAL, CHAIN_APPROX_TC89_L1, contourArea, circle, waitKey
+from cv2 import getRotationMatrix2D, warpAffine, namedWindow, VideoCapture, destroyAllWindows, cvtColor, GaussianBlur, VideoWriter, absdiff, threshold, THRESH_BINARY, Canny, findContours,  RETR_EXTERNAL, CHAIN_APPROX_TC89_L1, contourArea, circle, waitKey, resize
 from cv2 import imshow as cv2imshow
 from cv2.cv import CV_RGB2GRAY, CV_FOURCC, CV_GRAY2RGB
 
@@ -83,12 +83,10 @@ class Analysis(object):
     def get_background(self):
         bg = np.load(os.path.join(self.background_dir,'%s_background.npz'%self.background_name))
         return bg
-    def get_bg_tr_cropped(self):
-        bg = self.get_background()['image']
-        tracking = self.get_tracking()['heat']
+    def crop(self, img):
         pts = self.get_selections()
         
-        height, width = np.shape(bg)
+        height, width = np.shape(img)
         pts_l = pts['pts_l']
         pts_r = pts['pts_r']
         allpoints = np.append(pts_l,pts_r,axis=0)
@@ -97,10 +95,9 @@ class Analysis(object):
         top = np.min([i[1] for i in allpoints])
         bottom = np.max([i[1] for i in allpoints])
 
-        background_crop = background[top:bottom, left:right]
-        track_crop = track[top:bottom, left:right]
+        cropped = img[top:bottom, left:right]
 
-        return (background_crop, track_crop)
+        return cropped
     def make_fig1(self):
 
         #leftmost = pts_l[np.argsort([p[0] for p in pts_l])][:2]
@@ -115,11 +112,12 @@ class Analysis(object):
         #plimshow(bl_rotated, cmap=mpl_cm.Greys_r)
         #plimshow(np.ma.masked_where(tr_rotated==0.,tr_rotated), cmap=mpl_cm.jet, interpolation=None)
         #plsavefig(self.trial_dir+'/%s_summary-rotation.png'%self.trial_name)
-        plimshow(background_crop, cmap=mpl_cm.Greys_r)
-        plimshow(np.ma.masked_where(track_crop==0., track_crop), cmap=mpl_cm.jet)
-        plsavefig(self.trial_dir+'/%s_summary.png'%self.trial_name)
-        plclose()
-        return (background_crop,track_crop,frames,centers)
+        #plimshow(background_crop, cmap=mpl_cm.Greys_r)
+        #plimshow(np.ma.masked_where(track_crop==0., track_crop), cmap=mpl_cm.jet)
+        #plsavefig(self.trial_dir+'/%s_summary.png'%self.trial_name)
+        #plclose()
+        #return (background_crop,track_crop,frames,centers)
+        pass
 
 class MouseTracker(object):
     def __init__(self, mouse, mode,  data_directory='.', diff_thresh=100, resample=8, translation_max=100, smoothing_kernel=19, consecutive_skip_threshold=2, selection_from=[]):
@@ -520,13 +518,11 @@ if __name__=='__main__':
     frame = MainFrame(root, options=options)
     root.mainloop()
    
-def analysis1(mice, datadir):
+def analysis1(mice, datadir, sigma=1.5, norm=True, show_perc=True):
     from scipy.ndimage.filters import gaussian_filter as gf
+    import pylab as pl
 
-    sigma = 1.5
     results = []
-    datadir = '.'
-    mice = ['Black6_5']
 
     BASELINE = 0
     TEST = 1
@@ -540,14 +536,31 @@ def analysis1(mice, datadir):
 
         for mouse in mice:
             a = Analysis(mouse, mode, data_directory=datadir)
-            bg,heat = a.get_bg_tr_cropped()
+            bg = a.get_background()['image']
+            tr = a.get_tracking()
+            heat = tr['heat']
+            
+            t = np.array(a.get_time())
+            tdiff = t[1:] - t[:-1]
+            assert np.std(tdiff) < 0.01
+            Ts = np.mean(tdiff)
+            resamp = tr['params'][np.where(tr['params_key']=='resample')]
+            spf = Ts*resamp
+            
+            heat *= spf
+            if norm:
+                heat = heat/np.sum(heat)
+            
+            bg = a.crop(bg)
+            heat = a.crop(heat)
+            
             heats.append(heat)
             pics.append(bg)
 
         minheight, minwidth = min([np.shape(h)[0] for h in heats]), min([np.shape(h)[1] for h in heats])
         for idx,h in enumerate(heats):
-            heats[idx] = cv2.resize(h, (minwidth,minheight))
-            pics[idx] = cv2.resize(pics[idx], (minwidth,minheight))
+            heats[idx] = resize(h, (minwidth,minheight))
+            pics[idx] = resize(pics[idx], (minwidth,minheight))
 
         heat = np.dstack(heats)
         img = np.dstack(pics)
@@ -557,35 +570,42 @@ def analysis1(mice, datadir):
         heat = heat/np.max(heat)
         results.append([img,heat])
 
-        pl.figure()
-        pl.imshow(results[BASELINE][IMG], cmap=mpl_cm.Greys_r)
-        pl.imshow(np.ma.masked_where(results[BASELINE][HEAT]<np.percentile(results[BASELINE][HEAT],50),results[BASELINE][HEAT]), cmap=mpl_cm.jet)
-        #pl.imshow(results[0][1])
-        pl.figure()
-        pl.imshow(results[TEST][IMG], cmap=mpl_cm.Greys_r)
-        pl.imshow(np.ma.masked_where(results[TEST][HEAT]<np.percentile(results[TEST][HEAT],70),results[TEST][HEAT]), cmap=mpl_cm.jet)
-        #pl.imshow(results[1][1])
+    pl.figure()
+    toshow = results[BASELINE][IMG]
+    pl.imshow(toshow, cmap=mpl_cm.Greys_r)
+    toshow = results[BASELINE][HEAT]
+    if show_perc:
+        toshow = np.ma.masked_where(toshow<np.percentile(toshow,50),toshow)
+    pl.imshow(toshow , cmap=mpl_cm.jet)
+    #pl.imshow(results[0][1])
+    pl.figure()
+    toshow = results[TEST][IMG]
+    pl.imshow(toshow, cmap=mpl_cm.Greys_r)
+    toshow = results[TEST][HEAT]
+    if show_perc:
+        toshow = np.ma.masked_where(toshow<np.percentile(toshow,70),toshow)
+    pl.imshow(toshow , cmap=mpl_cm.jet)
+    #pl.imshow(results[1][1])
 
 
 
-def analysis2():
-     
-    #get times for multple mice
-
-    import numpy as np
-    import pylab as pa
+def analysis2(mice, datadir):
     from csv import DictWriter as DW
 
-    mice = ['Black6_9', 'Black6_10', 'Black6_11', 'Black6_7', 'Black6_8',  'Black6_13', 'Black6_14', 'Black6_15']
 
-    results = DW(open('/Users/Benson/Desktop/times.csv','w'), fieldnames=['Mouse','trial-type','left\%','right\%','middle\%','left', "right",'middle','total'])
+    results = DW(open('/Users/Benson/Desktop/times.csv','w'), fieldnames=['Mouse','trial-type','left\%','right\%','middle\%','left', "right",'middle','total_roomtime', 'total_trialtime'])
     results.writeheader()
 
     for mouse in mice:
         for mode in [0,1]:
-            a = Analysis(mouse, mode, data_directory='/Volumes/COMPATIBLE/April4-data')
-            time, nframes, left, right, middle, resample, c, ca =  a.get_times()
-            time = np.array(time)
+            a = Analysis(mouse, mode, data_directory=datadir)
+            tr = a.get_tracking()
+            time = np.array(a.get_time())
+            nframes = tr['n_frames']
+            left = tr['left']+tr['left_assumed']
+            right = tr['right']+tr['right_assumed']
+            middle = tr['middle']+tr['middle_assumed']
+            resample = tr['params'][np.where(tr['params_key']=='resample')]
             Ts = np.mean(time[1:]-time[:-1])
             newTs = float(Ts * resample)
             dic = {}
@@ -598,9 +618,10 @@ def analysis2():
             dic['left'] = left*newTs
             dic['right'] = right*newTs
             dic['middle'] = middle*newTs
-            dic['total'] = total
+            dic['total_roomtime'] = total
             dic['left\%'] = left*newTs/total*100.
             dic['right\%'] = right*newTs/total*100.
             dic['middle\%'] = middle*newTs/total*100.
+            dic['total_trialtime'] = nframes*newTs
             results.writerow(dic)
 
