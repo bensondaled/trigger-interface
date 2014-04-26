@@ -570,7 +570,7 @@ def analysis1(mice, datadir, sigma=1.5, norm=True, show_perc=True):
         heat = heat/np.max(heat)
         results.append([img,heat])
 
-    pl.figure()
+    #pl.figure()
     toshow = results[BASELINE][IMG]
     #pl.imshow(toshow, cmap=mpl_cm.Greys_r)
     toshow = results[BASELINE][HEAT]
@@ -578,7 +578,7 @@ def analysis1(mice, datadir, sigma=1.5, norm=True, show_perc=True):
         toshow = np.ma.masked_where(toshow<np.percentile(toshow,50),toshow)
     #pl.imshow(toshow , cmap=mpl_cm.jet)
     #pl.imshow(results[0][1])
-    pl.figure()
+    #pl.figure()
     toshow = results[TEST][IMG]
     #pl.imshow(toshow, cmap=mpl_cm.Greys_r)
     toshow = results[TEST][HEAT]

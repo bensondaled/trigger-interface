@@ -19,7 +19,7 @@ from core.daq import DAQ, Trigger
 from core.cameras import Camera
 
 class Experiment(object):
-    def __init__(self, camera=None, daq=None, mask_names=('WHEEL','EYE'),  motion_mask='WHEEL', movement_query_frames=20, movement_std_thresh=1.5, trigger_cycle=None, inter_trial_min=10.0, n_trials=-1):
+    def __init__(self, camera=None, daq=None, mask_names=('WHEEL','EYE'),  motion_mask='WHEEL', movement_query_frames=20, movement_std_thresh=1.5, trigger_cycle=None, inter_trial_min=10.0, n_trials=-1, resample=1):
         """
         Parameters:
                 cameras: [list of] Camera object[s]
@@ -39,12 +39,15 @@ class Experiment(object):
         
         if type(daq) == DAQ:
             self.daq = daq
+        elif daq==None:
+            self.daq = DAQ()
         else:
             raise Exception('No valid DAQ supplied.')
 
         # Set static parameters
         self.trigger_cycle = trigger_cycle
         self.mask_names = mask_names
+        self.resample = resample
 
         # Set variable parameters
         self.param_names = ['movement_std_threshold', 'movement_query_frames', 'inter_trial_min']
@@ -92,6 +95,7 @@ class Experiment(object):
         items['Continue (go)'] = 'g'
         items['Redo trial'] = 'r'
         items['Quit'] = 'q'
+        items['Manual Trigger'] = 't'
 
         for idx,item in enumerate(items):
             cv2.putText(img,item+':', (lab_origin,textheight+idx*textheight), cv2.FONT_HERSHEY_SIMPLEX, textsize, (0,0,0)) 
@@ -138,6 +142,7 @@ class Experiment(object):
         self.TRIAL_PAUSE = False
         self.last_trial_off = pytime.time()
         self.monitor_vals = []
+        self.frame_count = 0
         
         # save metadata
         dic = {}
@@ -146,6 +151,7 @@ class Experiment(object):
         dic['camera'] = self.camera.metadata()
         dic['daq'] = self.daq.metadata()
         dic['trigger_cycle'] = self.trigger_cycle.metadata()
+        dic['resample'] = self.resample
         f = open(os.path.join(self.name,"metadata.json"), 'w')
         f.write("%s"%json.dumps(dic))
         f.close()
@@ -191,6 +197,7 @@ class Experiment(object):
             return False
         return self.monitor_vals[-1] < self.params['movement_std_threshold']
     def store_frame(self, frame, timestamp):
+        #Note that if very long recording sessions are desired, this should be modified to a cv2 VideoWriter saving each frame to file directly
         if self.img_set != None:
             self.img_set = np.dstack([self.img_set, frame])
         else:
@@ -230,18 +237,20 @@ class Experiment(object):
         plot = cv2.resize(plot, newshape)
         return plot
     def next_frame(self):
-        if not self.TRIAL_PAUSE:
-            frame, timestamp = self.camera.read()
-            if self.TRIAL_ON:
-                self.store_frame(frame, timestamp)
-            elif not self.TRIAL_ON:
+        frame, timestamp = self.camera.read()
+        self.frame_count += 1
+        if self.TRIAL_ON:
+            self.store_frame(frame, timestamp)
+        if not self.frame_count % self.resample:
+            if not self.TRIAL_ON and not self.TRIAL_PAUSE:
                 self.monitor_frame(frame)
-                cv2.imshow(self.window, frame)
+            cv2.imshow(self.window, frame)
     def send_trigger(self):
         self.daq.trigger(self.trigger_cycle.next)
         print "Sent trigger #%i"%(self.trial_count)
     def step(self):
         self.next_frame()
+        c = cv2.waitKey(1)
         
         if self.TRIAL_ON:
             if pytime.time()-self.TRIAL_ON >= self.trigger_cycle.current.duration:
@@ -250,8 +259,6 @@ class Experiment(object):
                 self.save()
 
         if not self.TRIAL_ON:           
-            c = cv2.waitKey(1)
-            
             if c == ord('p'):
                 self.TRIAL_PAUSE = True
                 self.update_status()
@@ -267,7 +274,7 @@ class Experiment(object):
                 return False
             
             if not self.TRIAL_PAUSE:
-                if self.query_for_trigger():
+                if self.query_for_trigger() or c==ord('t'):
                     self.send_trigger()
                     self.TRIAL_ON = pytime.time()
                     self.trial_count += 1
@@ -281,6 +288,7 @@ class Experiment(object):
         while cont:
             cont = self.step()
         self.end()
+        print "Experiment ended."
         
 class TriggerCycle(object):
     def __init__(self, triggers=[]):
@@ -300,37 +308,14 @@ class TriggerCycle(object):
         md['triggers'] = [t.metadata() for t in self.triggers]
         return md
 
-
-
 if __name__=='__main__':
     cam =  Camera(idx=0, resolution=(320,240), frame_rate=20, color_mode=Camera.BW)
     CS = Trigger(msg=[0,0,1,1], duration=5.0, name='CS')
     US = Trigger(msg=[0,0,0,1], duration=5.0, name='US')
-    trigger_cycle = TriggerCycle(triggers=[CS, US, CS, US])
-    daq = DAQ()
+    trigger_cycle = TriggerCycle(triggers=[CS, US, CS, CS])
     
-    exp = Experiment(camera=cam, daq=DAQ(), trigger_cycle=trigger_cycle, n_trials=20)
+    exp = Experiment(camera=cam, trigger_cycle=trigger_cycle, n_trials=20, resample=5)
     exp.run() #'q' can always be used to end the run early. don't kill the process
 
 
-
-# give a trigger with a command
 # display average eyelid after triggers
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
