@@ -2,6 +2,7 @@
 import sys
 import os
 import json
+import re
 
 #numpy & scipy
 from scipy.io import savemat
@@ -594,8 +595,7 @@ def analysis1(mice, datadir, sigma=1.5, norm=True, show_perc=True):
 def analysis2(mice, datadir):
     from csv import DictWriter as DW
 
-
-    results = DW(open('/Users/Benson/Desktop/times.csv','w'), fieldnames=['Mouse','trial-type','left\%','right\%','middle\%','left', "right",'middle','total_roomtime', 'total_trialtime'])
+    results = DW(open('/Users/Benson/Desktop/times.csv','w'), fieldnames=['Mouse','trial-type','left\%','right\%','middle\%','left', "right",'middle','entries_left','entries_right','entries_middle','total_roomtime', 'total_trialtime'])
     results.writeheader()
 
     for mouse in mice:
@@ -625,5 +625,15 @@ def analysis2(mice, datadir):
             dic['right\%'] = right*newTs/total*100.
             dic['middle\%'] = middle*newTs/total*100.
             dic['total_trialtime'] = nframes*newTs
+
+            sel = a.get_selections()
+            cen = tr['centers']
+            path_l, path_r, path_c = [mpl_path.Path(pts) for pts in [sel['pts_l'],sel['pts_r'],sel['pts_c']]]
+            cen_str = ''.join([['l','m','r','x'][[path_l.contains_point(c),path_c.contains_point(c),path_r.contains_point(c), True].index(True)] for c in cen])
+            cen_str = cen_str.replace('x','')
+            dic['entries_left'] = len([m.start() for m in re.finditer('ml', cen_str)]) + int(cen_str[0]=='l')
+            dic['entries_right'] = len([m.start() for m in re.finditer('mr', cen_str)]) + int(cen_str[0]=='r')
+            dic['entries_middle'] = len([m.start() for m in re.finditer('lm', cen_str)]) + len([m.start() for m in re.finditer('rm',cen_str)])
+
             results.writerow(dic)
 
