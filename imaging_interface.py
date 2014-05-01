@@ -34,6 +34,7 @@ class Experiment(object):
         """
         if type(camera) == Camera:
             self.camera = camera
+            self.camera.read()
         else:
             raise Exception('No valid camera supplied.')
         
@@ -135,9 +136,7 @@ class Experiment(object):
             self.set_masks()
         
         # setup containers for acquired data
-        self.img_set = None
         self.monitor_img_set = None
-        self.time = []
         self.TRIAL_ON = False
         self.TRIAL_PAUSE = False
         self.last_trial_off = pytime.time()
@@ -175,16 +174,6 @@ class Experiment(object):
                         mask[ridx,cidx] = False
             self.masks[m] = mask
             self.mask_idxs[m] = np.where(mask==False)
-    def save(self, cam_idx=None, frame=None):
-        filename = os.path.join(self.name,'trial%i.npz'%(self.trial_count))
-        if os.path.isfile(filename):
-            i = 1
-            while os.path.isfile(os.path.join(self.name,'trial%i_redo%i.npz'%(self.trial_count,i))):
-                i += 1
-            filename = os.path.join(self.name,'trial%i_redo%i.npz'%(self.trial_count,i))
-        np.savez_compressed(filename, time=self.time, data=self.img_set.transpose(2,0,1))
-        self.img_set = None
-        self.time = []
     def end(self):
         try:
             self.camera.release()
@@ -196,13 +185,6 @@ class Experiment(object):
         if pytime.time()-self.last_trial_off < self.params['inter_trial_min']:
             return False
         return self.monitor_vals[-1] < self.params['movement_std_threshold']
-    def store_frame(self, frame, timestamp):
-        #Note that if very long recording sessions are desired, this should be modified to a cv2 VideoWriter saving each frame to file directly
-        if self.img_set != None:
-            self.img_set = np.dstack([self.img_set, frame])
-        else:
-            self.img_set = frame
-        self.time.append(timestamp)
     def monitor_frame(self, frame):
         if self.monitor_img_set != None:
             self.monitor_img_set = np.dstack([self.monitor_img_set, frame])
@@ -212,9 +194,9 @@ class Experiment(object):
                 self.monitor_img_set = self.monitor_img_set[...,-self.params['movement_query_frames']:]
             
             mask_idxs = self.mask_idxs[self.motion_mask]
-            std_pts = np.std(self.monitor_img_set[mask_idxs[0],mask_idxs[1],:], axis=0)
+            std_pts = np.std(self.monitor_img_set[mask_idxs[0],mask_idxs[1],:], axis=1)
             self.monitor_vals.append(np.mean(std_pts))
-            
+
             if len(self.monitor_vals)>self.params['movement_query_frames']:
                 self.monitor_vals = self.monitor_vals[-self.params['movement_query_frames']:]
            
@@ -225,7 +207,7 @@ class Experiment(object):
     def imgplot(self):
         mqf = self.params['movement_query_frames']
         w = mqf
-        h = 100
+        h = 50
         plot = np.zeros((h,w))
         vals = np.append(np.zeros(mqf-len(self.monitor_vals)),self.monitor_vals)
         vals = np.round(vals).astype(np.uint8)
@@ -240,25 +222,47 @@ class Experiment(object):
         frame, timestamp = self.camera.read()
         self.frame_count += 1
         if self.TRIAL_ON:
-            self.store_frame(frame, timestamp)
-        if not self.frame_count % self.resample:
+            self.writer.write(frame)
+            self.time.append(timestamp)
+            #self.store_frame(frame, timestamp) #OLD, SLOW
+        elif not self.frame_count % self.resample: #if to elif
             if not self.TRIAL_ON and not self.TRIAL_PAUSE:
                 self.monitor_frame(frame)
-            cv2.imshow(self.window, frame)
+                cv2.imshow(self.window, frame) #into if indentation
     def send_trigger(self):
         self.daq.trigger(self.trigger_cycle.next)
         print "Sent trigger #%i"%(self.trial_count)
+    def start_trial(self):
+        self.TRIAL_ON = pytime.time()
+        self.trial_count += 1
+        
+        self.filename = os.path.join(self.name,'trial%i'%(self.trial_count))
+        if os.path.isfile(self.filename):
+            i = 1
+            while os.path.isfile(os.path.join(self.name,'trial%i_redo%i'%(self.trial_count,i))):
+                i += 1
+            self.filename = os.path.join(self.name,'trial%i_redo%i.npz'%(self.trial_count,i))
+        
+        self.writer = cv2.VideoWriter(self.filename+'.avi',1,self.camera.frame_rate,frameSize=self.camera.resolution,isColor=False)
+        self.time = []
+        self.monitor_img_set = None
+        self.monitor_vals = []
+    def end_trial(self):
+        self.TRIAL_ON = False
+        self.last_trial_off = pytime.time()
+        np.savez_compressed(self.filename+'.npz', time=self.time)         
+        self.writer.release()
+        self.filename = None
     def step(self):
         self.next_frame()
-        c = cv2.waitKey(1)
         
         if self.TRIAL_ON:
             if pytime.time()-self.TRIAL_ON >= self.trigger_cycle.current.duration:
-                self.TRIAL_ON = False
-                self.last_trial_off = pytime.time()
-                self.save()
+                self.end_trial()
 
-        if not self.TRIAL_ON:           
+        if not self.TRIAL_ON: 
+            c = cv2.waitKey(1) #from after next_frame to here
+            
             if c == ord('p'):
                 self.TRIAL_PAUSE = True
                 self.update_status()
@@ -276,10 +280,7 @@ class Experiment(object):
             if not self.TRIAL_PAUSE:
                 if self.query_for_trigger() or c==ord('t'):
                     self.send_trigger()
-                    self.TRIAL_ON = pytime.time()
-                    self.trial_count += 1
-                    self.monitor_img_set = None
-                    self.monitor_vals = []
+                    self.start_trial()
                 self.update_status()
         
         return True
@@ -309,13 +310,25 @@ class TriggerCycle(object):
         return md
 
 if __name__=='__main__':
-    cam =  Camera(idx=0, resolution=(320,240), frame_rate=20, color_mode=Camera.BW)
+    cam =  Camera(idx=0, resolution=(320,240), frame_rate=187, color_mode=Camera.BW)
+
     CS = Trigger(msg=[0,0,1,1], duration=5.0, name='CS')
     US = Trigger(msg=[0,0,0,1], duration=5.0, name='US')
     trigger_cycle = TriggerCycle(triggers=[CS, US, CS, CS])
     
-    exp = Experiment(camera=cam, trigger_cycle=trigger_cycle, n_trials=20, resample=5)
+    exp = Experiment(camera=cam, trigger_cycle=trigger_cycle, n_trials=20, resample=5, movement_std_thresh=10)
     exp.run() #'q' can always be used to end the run early. don't kill the process
-
-
 # display average eyelid after triggers
+"""
+        ##
+        self.writer = cv2.VideoWriter('test1.avi',-1,self.camera.frame_rate,frameSize=self.camera.resolution,isColor=False)
+        ts = []
+        self.TRIAL_ON = True
+        for i in range(400):
+            x= self.next_frame()
+            ts.append(pytime.time())
+        print 1/np.mean(np.array(ts)[1:] - np.array(ts)[:-1])
+        self.writer.release()
+        return False
+        ##
+"""
