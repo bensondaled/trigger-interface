@@ -78,10 +78,10 @@ class Experiment(object):
         cv2.namedWindow(self.status, cv.CV_WINDOW_NORMAL)
         cv2.namedWindow(self.controls, cv.CV_WINDOW_NORMAL)
         cv2.namedWindow(self.params_win, cv.CV_WINDOW_NORMAL)
-        cv2.moveWindow(self.window, 210, 0)
-        cv2.moveWindow(self.status, 960, 0)
-        cv2.moveWindow(self.controls, 0, 0)
-        cv2.moveWindow(self.params_win, 1020, 0)
+        cv2.moveWindow(self.window, 0, 0)
+        cv2.moveWindow(self.status, 0, 500)
+        cv2.moveWindow(self.controls, 600, 0)
+        cv2.moveWindow(self.params_win, 600, 500)
         self.disp_controls()
         for pn in self.param_names:
             cv2.createTrackbar(pn,self.params_win,int(self.params[pn]), 100, self.update_trackbar_params)
@@ -100,19 +100,19 @@ class Experiment(object):
         self.params['wheel_translation'] -= 50
         self.params['eye_translation'] -= 50
         self.plotline.set_ydata([self.params['movement_std_threshold']+self.params['wheel_translation'] for i in range(self.params['movement_query_frames'])])
-    def disp_controls(self):
-        img = np.ones((150,170))*255
-        lab_origin = 10
-        val_origin = 120
-        textsize = 0.4
-        textheight = 25
-    
+    def disp_controls(self):    
         items = {}
         items['Pause'] = 'p'
         items['Continue (go)'] = 'g'
         items['Redo trial'] = 'r'
         items['Quit'] = 'q'
         items['Manual Trigger'] = 't'
+        
+        lab_origin = 10
+        val_origin = 120
+        textsize = 0.4
+        textheight = 25
+        img = np.ones((round(textheight*len(items)*1.1),170))*255
 
         for idx,item in enumerate(items):
             cv2.putText(img,item+':', (lab_origin,textheight+idx*textheight), cv2.FONT_HERSHEY_SIMPLEX, textsize, (0,0,0)) 
@@ -120,18 +120,22 @@ class Experiment(object):
     
         cv2.imshow(self.controls, img)
     def update_status(self):
-        self.status_img = np.ones((400,300))*255
-        lab_origin = 10
-        val_origin = 120
-        textsize = 0.4
-        textheight = 30
-    
         items = {}
         items['Since last'] = str(round(pytime.time()-self.last_trial_off, 3))
         items['Trials done'] = str(self.trial_count)
         items['Paused'] = str(self.TRIAL_PAUSE)
         items['Last trigger'] = str(self.trigger_cycle.current.name)
-
+        if len(self.monitor_vals['EYE']):
+            items['Value'] = str(self.monitor_vals['EYE'][-1])
+        else:
+            items['Value'] = str(0)
+      
+        lab_origin = 10
+        val_origin = 120
+        textsize = 0.4
+        textheight = 25
+        self.status_img = np.ones((round(textheight*len(items)*1.1),300))*255
+        
         for idx,item in enumerate(items):
             cv2.putText(self.status_img,item+':', (lab_origin,textheight+idx*textheight), cv2.FONT_HERSHEY_SIMPLEX, textsize, (0,0,0)) 
             cv2.putText(self.status_img,items[item], (val_origin,textheight+idx*textheight), cv2.FONT_HERSHEY_SIMPLEX, textsize, (0,0,0)) 
@@ -203,7 +207,7 @@ class Experiment(object):
     def query_for_trigger(self):
         if pytime.time()-self.last_trial_off < self.params['inter_trial_min']:
             return False
-        return self.monitor_vals[self.motion_mask][-1] < self.params['movement_std_threshold']
+        return self.monitor_vals[self.motion_mask][-1]*self.params['wheel_stretch'] < self.params['movement_std_threshold']
     def monitor_frame(self, frame):
         for mask in self.mask_names:
             if self.monitor_img_set[mask] != None:
@@ -330,7 +334,7 @@ class TriggerCycle(object):
         return md
 
 if __name__=='__main__':
-    cam =  Camera(idx=0, resolution=(320,240), frame_rate=100, color_mode=Camera.BW)
+    cam =  Camera(idx=0, resolution=(320,240), frame_rate=200, color_mode=Camera.BW)
 
     CS = Trigger(msg=[0,0,1,1], duration=5.0, name='CS')
     US = Trigger(msg=[0,0,0,1], duration=5.0, name='US')
@@ -338,7 +342,6 @@ if __name__=='__main__':
     
     exp = Experiment(camera=cam, trigger_cycle=trigger_cycle, n_trials=20, resample=5, movement_std_thresh=10)
     exp.run() #'q' can always be used to end the run early. don't kill the process
-# display average eyelid after triggers
 """
         ##
         self.writer = cv2.VideoWriter('test1.avi',-1,self.camera.frame_rate,frameSize=self.camera.resolution,isColor=False)
