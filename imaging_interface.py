@@ -8,7 +8,6 @@ import numpy as np
 import pylab as pl
 import matplotlib.cm as mpl_cm
 from matplotlib import path as mpl_path
-import matplotlib.animation as ani
 
 #opencv
 import cv2
@@ -20,17 +19,6 @@ from core.cameras import Camera
 
 class Experiment(object):
     def __init__(self, camera=None, daq=None, mask_names=('WHEEL','EYE'), movement_query_frames=10, movement_std_thresh=1.5, trigger_cycle=None, inter_trial_min=10.0, n_trials=-1, resample=1, monitor_vals_display=100):
-        """
-        Parameters:
-                cameras: [list of] Camera object[s]
-                daq: one DAQ object (data acquisition interface)
-                save_mode (const int): either NP (numpy) or CV (openCV)
-                mask_names (list of str): names for the masks to be selected from monitor_cam
-                monitor_cam_idx: index of camera used to monitor with masks
-                movement_query_frames: number of past frames to analyze for motion
-                movement_std_thresh: standard deviation threshold for movement detection
-                trigger: Trigger object for the experiment
-        """
         if type(camera) == Camera:
             self.camera = camera
             self.camera.read()
@@ -58,9 +46,9 @@ class Experiment(object):
         self.params['movement_query_frames'] = movement_query_frames
         self.params['inter_trial_min'] = inter_trial_min
         self.params['wheel_translation'] = 50
-        self.params['wheel_stretch'] = 50
+        self.params['wheel_stretch'] = 25
         self.params['eye_translation'] = 50
-        self.params['eye_stretch'] = 50
+        self.params['eye_stretch'] = 25
         
 
         # Setup interface
@@ -79,9 +67,9 @@ class Experiment(object):
         cv2.namedWindow(self.controls, cv.CV_WINDOW_NORMAL)
         cv2.namedWindow(self.params_win, cv.CV_WINDOW_NORMAL)
         cv2.moveWindow(self.window, 0, 0)
-        cv2.moveWindow(self.status, 0, 500)
-        cv2.moveWindow(self.controls, 600, 0)
-        cv2.moveWindow(self.params_win, 600, 500)
+        cv2.moveWindow(self.status, 0, 600)
+        cv2.moveWindow(self.controls, 800, 0)
+        cv2.moveWindow(self.params_win, 800, 600)
         self.disp_controls()
         for pn in self.param_names:
             cv2.createTrackbar(pn,self.params_win,int(self.params[pn]), 100, self.update_trackbar_params)
@@ -194,9 +182,9 @@ class Experiment(object):
         self.last_timestamp = timestamp
     def set_masks(self):
         for m in self.mask_names:
-            print "Please select mask: %s."%m
             frame, timestamp = self.camera.read()
             pl.figure()
+            pl.title("Select mask: %s."%m)
             pl.imshow(frame, cmap=mpl_cm.Greys_r)
             pts = pl.ginput(0)
             pl.close()
@@ -236,7 +224,7 @@ class Experiment(object):
                     wval = np.mean(std_pts) * self.params['wheel_stretch'] + self.params['wheel_translation']
                     self.monitor_vals[mask].append(wval)
                 elif mask=='EYE':
-                    mean_pts = np.mean(self.monitor_img_set[mask][mask_idxs[0],mask_idxs[1],:], axis=1)
+                    mean_pts = np.mean(self.monitor_img_set[mask][mask_idxs[0],mask_idxs[1],-1])
                     eyval = np.mean(mean_pts) * self.params['eye_stretch'] + self.params['eye_translation']
                     self.monitor_vals[mask].append(eyval)
 
@@ -251,7 +239,7 @@ class Experiment(object):
     def update_analog_daq(self):
         if len(self.monitor_vals['EYE']) > 0:
             val = self.monitor_vals['EYE'][-1]
-            val = self.normalize(val, oldmin=0., oldmax=255., newmin=self.analog_daq.minn, newmax=self.analog_daq.maxx)
+            val = self.normalize(val, oldmin=0., oldmax=255. * self.params['eye_stretch'] + self.params['eye_translation'], newmin=self.analog_daq.minn, newmax=self.analog_daq.maxx)          
             tr = Trigger(msg=val)
             self.analog_daq.trigger(tr)
     def normalize(self, val, oldmin, oldmax, newmin, newmax):
@@ -259,7 +247,7 @@ class Experiment(object):
     def update_plots(self):
         toshow_w = np.array(self.monitor_vals['WHEEL'])
         toshow_e = np.array(self.monitor_vals['EYE'])
-        if len(toshow_w) != self.params['movement_query_frames']:
+        if len(toshow_w) != self.monitor_vals_display:
             toshow_w = np.append(toshow_w, np.repeat(None, self.monitor_vals_display-len(toshow_w)))
             toshow_e = np.append(toshow_e, np.repeat(None, self.monitor_vals_display-len(toshow_e)))
         self.plotdata['WHEEL'].set_ydata(toshow_w)
@@ -267,13 +255,13 @@ class Experiment(object):
         self.fig.canvas.draw()
     def next_frame(self):
         frame, timestamp = self.camera.read()
+        self.update_framerate(timestamp)
         self.frame_count += 1
         if self.TRIAL_ON:
             self.writer.write(frame)
             self.time.append(timestamp)
         if not self.frame_count % self.resample:
             if not self.TRIAL_ON and not self.TRIAL_PAUSE:
-                self.update_framerate(timestamp)
                 self.monitor_frame(frame)
             cv2.imshow(self.window, frame)
     def send_trigger(self):
@@ -357,24 +345,4 @@ class TriggerCycle(object):
         return md
 
 if __name__=='__main__':
-    cam =  Camera(idx=0, resolution=(320,240), frame_rate=200, color_mode=Camera.BW)
-
-    CS = Trigger(msg=[0,0,1,1], duration=5.0, name='CS')
-    US = Trigger(msg=[0,0,0,1], duration=5.0, name='US')
-    trigger_cycle = TriggerCycle(triggers=[CS, US, CS, CS])
-    
-    exp = Experiment(camera=cam, trigger_cycle=trigger_cycle, n_trials=20, resample=5, movement_std_thresh=10)
-    exp.run() #'q' can always be used to end the run early. don't kill the process
-"""
-        ##
-        self.writer = cv2.VideoWriter('test1.avi',-1,self.camera.frame_rate,frameSize=self.camera.resolution,isColor=False)
-        ts = []
-        self.TRIAL_ON = True
-        for i in range(400):
-            x= self.next_frame()
-            ts.append(pytime.time())
-        print 1/np.mean(np.array(ts)[1:] - np.array(ts)[:-1])
-        self.writer.release()
-        return False
-        ##
-"""
+    pass
