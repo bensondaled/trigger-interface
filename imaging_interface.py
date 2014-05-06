@@ -153,8 +153,11 @@ class Experiment(object):
             self.set_masks()
         
         # setup containers for acquired data
-        self.monitor_img_set = {n:None for n in self.mask_names}
-        self.monitor_vals = {m:[] for m in self.mask_names}
+        self.monitor_img_set = np.empty((self.camera.resolution[1],self.camera.resolution[0],self.params['movement_query_frames']))
+        self.monitor_img_set[:] = None
+        self.monitor_vals = {m:np.empty(self.monitor_vals_display) for m in self.mask_names}
+        for m in self.monitor_vals:
+            self.monitor_vals[m][:] = None
         self.TRIAL_ON = False
         self.TRIAL_PAUSE = False
         self.last_trial_off = pytime.time()
@@ -209,35 +212,28 @@ class Experiment(object):
         if pytime.time()-self.last_trial_off < self.params['inter_trial_min']:
             return False
         return self.monitor_vals['WHEEL'][-1] < self.params['movement_std_threshold']
-    def monitor_frame(self, frame):
-        for mask in self.mask_names:
-            if self.monitor_img_set[mask] != None:
-                self.monitor_img_set[mask] = np.dstack([self.monitor_img_set[mask], frame])
-                
-                # only hold on to as many as you'll use for computation:
-                if np.shape(self.monitor_img_set[mask])[-1]>self.params['movement_query_frames']:
-                    self.monitor_img_set[mask] = self.monitor_img_set[mask][...,-self.params['movement_query_frames']:]
-                
-                mask_idxs = self.mask_idxs[mask]
-                if mask=='WHEEL':
-                    std_pts = np.std(self.monitor_img_set[mask][mask_idxs[0],mask_idxs[1],:], axis=1)
-                    wval = np.mean(std_pts) * self.params['wheel_stretch'] + self.params['wheel_translation']
-                    self.monitor_vals[mask].append(wval)
-                elif mask=='EYE':
-                    mean_pts = np.mean(self.monitor_img_set[mask][mask_idxs[0],mask_idxs[1],-1])
-                    eyval = np.mean(mean_pts) * self.params['eye_stretch'] + self.params['eye_translation']
-                    self.monitor_vals[mask].append(eyval)
-
-                # only hold on to as many as you'll display:
-                if len(self.monitor_vals[mask])>self.monitor_vals_display:
-                    self.monitor_vals[mask] = self.monitor_vals[mask][-self.monitor_vals_display:]
-            else:
-                self.monitor_img_set[mask] = frame
+    def monitor_frame(self, frame, masks=('WHEEL', 'EYE'), show=True):
+        if 'WHEEL' in masks:
+            if None in self.monitor_img_set:
+                return 
+            self.monitor_img_set = np.roll(self.monitor_img_set, 1, axis=2)
+            self.monitor_img_set[:,:,0] = frame
+            pts = self.monitor_img_set[self.mask_idxs['WHEEL'][0],self.mask_idxs['WHEEL'][1],:]
+            std_pts = np.std(pts, axis=1)
+            wval = np.mean(std_pts) * self.params['wheel_stretch'] + self.params['wheel_translation']
+            self.monitor_vals['WHEEL'] = np.roll(self.monitor_vals['WHEEL'], -1)
+            self.monitor_vals['WHEEL'][-1] = wval
+        if 'EYE' in masks:
+            pts = frame[self.mask_idxs['EYE'][0],self.mask_idxs['EYE'][1]]
+            eyval = np.mean(pts) * self.params['eye_stretch'] + self.params['eye_translation']
+            self.monitor_vals['EYE'] = np.roll(self.monitor_vals['EYE'], -1)
+            self.monitor_vals['EYE'][-1] = eyval
+            self.update_analog_daq()
         
-        self.update_analog_daq()
-        self.update_plots()
+        if show:
+            self.update_plots()
     def update_analog_daq(self):
-        if len(self.monitor_vals['EYE']) > 0:
+        if self.monitor_vals['EYE'][-1] != None:
             val = self.monitor_vals['EYE'][-1]
             val = self.normalize(val, oldmin=0., oldmax=255. * self.params['eye_stretch'] + self.params['eye_translation'], newmin=self.analog_daq.minn, newmax=self.analog_daq.maxx)          
             tr = Trigger(msg=val)
@@ -258,11 +254,13 @@ class Experiment(object):
         self.update_framerate(timestamp)
         self.frame_count += 1
         if self.TRIAL_ON:
+            qq=pytime.time()
             self.writer.write(frame)
             self.time.append(timestamp)
+            self.monitor_frame(frame, masks=('EYE'), show=False)
         if not self.frame_count % self.resample:
             if not self.TRIAL_ON and not self.TRIAL_PAUSE:
-                self.monitor_frame(frame)
+                self.monitor_frame(frame, masks=('WHEEL','EYE'))
             cv2.imshow(self.window, frame)
     def send_trigger(self):
         self.daq.trigger(self.trigger_cycle.next)
@@ -280,8 +278,11 @@ class Experiment(object):
         
         self.writer = cv2.VideoWriter(self.filename+'.avi',0,self.camera.frame_rate,frameSize=self.camera.resolution,isColor=False)
         self.time = []
-        self.monitor_img_set = {n:None for n in self.mask_names}
-        self.monitor_vals = {m:[] for m in self.mask_names}
+        self.monitor_img_set = np.empty((self.camera.resolution[1],self.camera.resolution[0],self.params['movement_query_frames']))
+        self.monitor_img_set[:] = None
+        self.monitor_vals = {m:np.empty(self.monitor_vals_display) for m in self.mask_names}
+        for m in self.monitor_vals:
+            self.monitor_vals[m][:] = None
     def end_trial(self):
         self.TRIAL_ON = False
         self.last_trial_off = pytime.time()

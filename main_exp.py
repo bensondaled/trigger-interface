@@ -8,7 +8,7 @@ CS = Trigger(msg=[0,0,1,1], duration=5.0, name='CS')
 US = Trigger(msg=[0,0,0,1], duration=5.0, name='US')
 trigger_cycle = TriggerCycle(triggers=[CS, US, CS, CS])
 
-exp = Experiment(camera=cam, trigger_cycle=trigger_cycle)
+exp = Experiment(camera=cam, trigger_cycle=trigger_cycle, n_trials=-1)
 exp.run() #'q' can always be used to end the run early. don't kill the process
 
 """
