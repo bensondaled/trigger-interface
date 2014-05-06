@@ -8,9 +8,7 @@ CS = Trigger(msg=[0,0,1,1], duration=5.0, name='CS')
 US = Trigger(msg=[0,0,0,1], duration=5.0, name='US')
 trigger_cycle = TriggerCycle(triggers=[CS, US, CS, CS])
         
-exp = Experiment(camera=cam, trigger_cycle=trigger_cycle, n_trials=20, resample=2, movement_std_thresh=10, movement_query_frames=3)
+exp = Experiment(camera=cam, trigger_cycle=trigger_cycle, n_trials=20, resample=1, movement_std_thresh=10, movement_query_frames=3)
 exp.run() #'q' can always be used to end the run early. don't kill the process
 
-#output scaled eyelid value
-#show frame rate
 #no buffer for eyelid

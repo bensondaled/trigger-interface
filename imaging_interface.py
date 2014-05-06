@@ -19,7 +19,7 @@ from core.daq import DAQ, Trigger
 from core.cameras import Camera
 
 class Experiment(object):
-    def __init__(self, camera=None, daq=None, mask_names=('WHEEL','EYE'),  motion_mask='WHEEL', movement_query_frames=10, movement_std_thresh=1.5, trigger_cycle=None, inter_trial_min=10.0, n_trials=-1, resample=1):
+    def __init__(self, camera=None, daq=None, mask_names=('WHEEL','EYE'), movement_query_frames=10, movement_std_thresh=1.5, trigger_cycle=None, inter_trial_min=10.0, n_trials=-1, resample=1, monitor_vals_display=100):
         """
         Parameters:
                 cameras: [list of] Camera object[s]
@@ -27,7 +27,6 @@ class Experiment(object):
                 save_mode (const int): either NP (numpy) or CV (openCV)
                 mask_names (list of str): names for the masks to be selected from monitor_cam
                 monitor_cam_idx: index of camera used to monitor with masks
-                motion_mask: name of mask used to detect motion
                 movement_query_frames: number of past frames to analyze for motion
                 movement_std_thresh: standard deviation threshold for movement detection
                 trigger: Trigger object for the experiment
@@ -50,6 +49,7 @@ class Experiment(object):
         self.trigger_cycle = trigger_cycle
         self.mask_names = mask_names
         self.resample = resample
+        self.monitor_vals_display = monitor_vals_display
 
         # Set variable parameters
         self.param_names = ['movement_std_threshold', 'movement_query_frames', 'inter_trial_min', 'wheel_translation','wheel_stretch','eye_translation','eye_stretch']
@@ -58,18 +58,18 @@ class Experiment(object):
         self.params['movement_query_frames'] = movement_query_frames
         self.params['inter_trial_min'] = inter_trial_min
         self.params['wheel_translation'] = 50
-        self.params['wheel_stretch'] = 2
+        self.params['wheel_stretch'] = 50
         self.params['eye_translation'] = 50
-        self.params['eye_stretch'] = 1
+        self.params['eye_stretch'] = 50
         
 
         # Setup interface
         pl.ion()
         self.fig = pl.figure()
         self.ax = self.fig.add_subplot(111)
-        self.ax.set_ylim([-1,100])
-        self.plotdata = {m:self.ax.plot(np.arange(self.params['movement_query_frames']),np.zeros(self.params['movement_query_frames']), c)[0] for m,c in zip(self.mask_names,['r-','b-'])}  
-        self.plotline, = self.ax.plot(np.arange(self.params['movement_query_frames']), [self.params['movement_std_threshold']+self.params['wheel_translation'] for _ in range(self.params['movement_query_frames'])], 'k--')
+        self.ax.set_ylim([-1, 255])
+        self.plotdata = {m:self.ax.plot(np.arange(self.monitor_vals_display),np.zeros(self.monitor_vals_display), c)[0] for m,c in zip(self.mask_names,['r-','b-'])} 
+        self.plotline, = self.ax.plot(np.arange(self.monitor_vals_display), np.repeat(self.params['movement_std_threshold'], self.monitor_vals_display), 'r--')
         self.window = 'Interface'
         self.status = 'Status'
         self.controls = 'Controls'
@@ -90,7 +90,6 @@ class Experiment(object):
         # Set initial variables
         self.masks = {}
         self.mask_idxs = {}
-        self.motion_mask = motion_mask
 
         # Run interactive init
         self.init(trials=n_trials)
@@ -99,7 +98,9 @@ class Experiment(object):
             self.params[param] = cv2.getTrackbarPos(param,self.params_win)
         self.params['wheel_translation'] -= 50
         self.params['eye_translation'] -= 50
-        self.plotline.set_ydata([self.params['movement_std_threshold']+self.params['wheel_translation'] for i in range(self.params['movement_query_frames'])])
+        self.params['wheel_stretch'] /= 25.
+        self.params['eye_stretch'] /= 25.
+        self.plotline.set_ydata(np.repeat(self.params['movement_std_threshold'], self.monitor_vals_display))
     def disp_controls(self):    
         items = {}
         items['Pause'] = 'p'
@@ -121,14 +122,18 @@ class Experiment(object):
         cv2.imshow(self.controls, img)
     def update_status(self):
         items = {}
-        items['Since last'] = str(round(pytime.time()-self.last_trial_off, 3))
-        items['Trials done'] = str(self.trial_count)
-        items['Paused'] = str(self.TRIAL_PAUSE)
-        items['Last trigger'] = str(self.trigger_cycle.current.name)
+        items['Since last'] = round(pytime.time()-self.last_trial_off, 3)
+        items['Trials done'] = self.trial_count
+        items['Paused'] = self.TRIAL_PAUSE
+        items['Last trigger'] = self.trigger_cycle.current.name
         if len(self.monitor_vals['EYE']):
-            items['Value'] = str(self.monitor_vals['EYE'][-1])
+            items['Eyelid Value'] = self.monitor_vals['EYE'][-1]
         else:
-            items['Value'] = str(0)
+            items['Eyelid Value'] = '(none yet)'
+        items['Frame Rate'] = self.inst_frame_rate
+
+        for item in items:
+            items[item] = str(items[item])
       
         lab_origin = 10
         val_origin = 120
@@ -144,6 +149,10 @@ class Experiment(object):
     def init(self, trials):
         self.name = pytime.strftime("%Y%m%d_%H%M%S")
         os.mkdir(self.name)
+
+        # set up frame rate details
+        self.last_timestamp = pytime.time()
+        self.inst_frame_rate = None
 
         # set up trial count
         self.trials_total = trials
@@ -179,6 +188,10 @@ class Experiment(object):
         # run some initial frames 
         for i in range(self.params['movement_query_frames']):
             self.next_frame()
+    def update_framerate(self, timestamp):
+        fr = 1/(timestamp - self.last_timestamp)
+        self.inst_frame_rate = fr
+        self.last_timestamp = timestamp
     def set_masks(self):
         for m in self.mask_names:
             print "Please select mask: %s."%m
@@ -207,42 +220,51 @@ class Experiment(object):
     def query_for_trigger(self):
         if pytime.time()-self.last_trial_off < self.params['inter_trial_min']:
             return False
-        return self.monitor_vals[self.motion_mask][-1]*self.params['wheel_stretch'] < self.params['movement_std_threshold']
+        return self.monitor_vals['WHEEL'][-1] < self.params['movement_std_threshold']
     def monitor_frame(self, frame):
         for mask in self.mask_names:
             if self.monitor_img_set[mask] != None:
                 self.monitor_img_set[mask] = np.dstack([self.monitor_img_set[mask], frame])
                 
-                # only hold on to as many as you'll look at:
+                # only hold on to as many as you'll use for computation:
                 if np.shape(self.monitor_img_set[mask])[-1]>self.params['movement_query_frames']:
                     self.monitor_img_set[mask] = self.monitor_img_set[mask][...,-self.params['movement_query_frames']:]
                 
                 mask_idxs = self.mask_idxs[mask]
-                if mask==self.motion_mask:
+                if mask=='WHEEL':
                     std_pts = np.std(self.monitor_img_set[mask][mask_idxs[0],mask_idxs[1],:], axis=1)
-                    self.monitor_vals[mask].append(np.mean(std_pts))
-                else:
+                    wval = np.mean(std_pts) * self.params['wheel_stretch'] + self.params['wheel_translation']
+                    self.monitor_vals[mask].append(wval)
+                elif mask=='EYE':
                     mean_pts = np.mean(self.monitor_img_set[mask][mask_idxs[0],mask_idxs[1],:], axis=1)
-                    self.monitor_vals[mask].append(np.mean(mean_pts))
+                    eyval = np.mean(mean_pts) * self.params['eye_stretch'] + self.params['eye_translation']
+                    self.monitor_vals[mask].append(eyval)
 
-                if len(self.monitor_vals[mask])>self.params['movement_query_frames']:
-                    self.monitor_vals[mask] = self.monitor_vals[mask][-self.params['movement_query_frames']:]
+                # only hold on to as many as you'll display:
+                if len(self.monitor_vals[mask])>self.monitor_vals_display:
+                    self.monitor_vals[mask] = self.monitor_vals[mask][-self.monitor_vals_display:]
             else:
                 self.monitor_img_set[mask] = frame
-        if len(self.monitor_vals['EYE']) > 0:
-            tr = Trigger(msg=self.normalize(self.monitor_vals['EYE'][-1], minn=self.analog_daq.minn, maxx=self.analog_daq.maxx))
-            self.analog_daq.trigger(tr)
         
-        toshow_w = np.array(self.monitor_vals['WHEEL']) * self.params['wheel_stretch']/10. + self.params['wheel_translation']
-        toshow_e = np.array(self.monitor_vals['EYE'])* self.params['eye_stretch']/10. + self.params['eye_translation']
+        self.update_analog_daq()
+        self.update_plots()
+    def update_analog_daq(self):
+        if len(self.monitor_vals['EYE']) > 0:
+            val = self.monitor_vals['EYE'][-1]
+            val = self.normalize(val, oldmin=0., oldmax=255., newmin=self.analog_daq.minn, newmax=self.analog_daq.maxx)
+            tr = Trigger(msg=val)
+            self.analog_daq.trigger(tr)
+    def normalize(self, val, oldmin, oldmax, newmin, newmax):
+        return ((val-oldmin)/oldmax) * (newmax-newmin) + newmin
+    def update_plots(self):
+        toshow_w = np.array(self.monitor_vals['WHEEL'])
+        toshow_e = np.array(self.monitor_vals['EYE'])
         if len(toshow_w) != self.params['movement_query_frames']:
-            toshow_w = np.append(toshow_w, np.array([None for _ in range(self.params['movement_query_frames']-len(toshow_w))]))
-            toshow_e = np.append(toshow_e, np.array([None for _ in range(self.params['movement_query_frames']-len(toshow_e))]))
+            toshow_w = np.append(toshow_w, np.repeat(None, self.monitor_vals_display-len(toshow_w)))
+            toshow_e = np.append(toshow_e, np.repeat(None, self.monitor_vals_display-len(toshow_e)))
         self.plotdata['WHEEL'].set_ydata(toshow_w)
         self.plotdata['EYE'].set_ydata(toshow_e)
         self.fig.canvas.draw()
-    def normalize(self, val, minn, maxx):
-        return val/1000. * (maxx-minn) + minn
     def next_frame(self):
         frame, timestamp = self.camera.read()
         self.frame_count += 1
@@ -251,6 +273,7 @@ class Experiment(object):
             self.time.append(timestamp)
         if not self.frame_count % self.resample:
             if not self.TRIAL_ON and not self.TRIAL_PAUSE:
+                self.update_framerate(timestamp)
                 self.monitor_frame(frame)
             cv2.imshow(self.window, frame)
     def send_trigger(self):
