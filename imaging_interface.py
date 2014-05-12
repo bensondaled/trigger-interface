@@ -18,7 +18,9 @@ from core.daq import DAQ, Trigger
 from core.cameras import Camera
 
 class Experiment(object):
-    def __init__(self, camera=None, daq=None, mask_names=('WHEEL','EYE'), movement_query_frames=10, movement_std_thresh=1.5, trigger_cycle=None, inter_trial_min=10.0, n_trials=-1, resample=1, monitor_vals_display=100):
+    def __init__(self, name=None, camera=None, daq=None, mask_names=('WHEEL','EYE'), movement_query_frames=10, movement_std_thresh=1.5, trigger_cycle=None, inter_trial_min=10.0, n_trials=-1, resample=1, monitor_vals_display=100):
+        self.name = name
+        
         if type(camera) == Camera:
             self.camera = camera
             self.camera.read()
@@ -37,19 +39,18 @@ class Experiment(object):
         self.trigger_cycle = trigger_cycle
         self.mask_names = mask_names
         self.resample = resample
+        self.movement_query_frames = movement_query_frames
         self.monitor_vals_display = monitor_vals_display
 
         # Set variable parameters
-        self.param_names = ['movement_std_threshold', 'movement_query_frames', 'inter_trial_min', 'wheel_translation','wheel_stretch','eye_translation','eye_stretch']
+        self.param_names = ['movement_std_threshold', 'inter_trial_min', 'wheel_translation','wheel_stretch','eye_translation','eye_stretch']
         self.params = {}
         self.params['movement_std_threshold'] = movement_std_thresh
-        self.params['movement_query_frames'] = movement_query_frames
         self.params['inter_trial_min'] = inter_trial_min
         self.params['wheel_translation'] = 50
         self.params['wheel_stretch'] = 25
         self.params['eye_translation'] = 50
         self.params['eye_stretch'] = 25
-        
 
         # Setup interface
         pl.ion()
@@ -58,89 +59,74 @@ class Experiment(object):
         self.ax.set_ylim([-1, 255])
         self.plotdata = {m:self.ax.plot(np.arange(self.monitor_vals_display),np.zeros(self.monitor_vals_display), c)[0] for m,c in zip(self.mask_names,['r-','b-'])} 
         self.plotline, = self.ax.plot(np.arange(self.monitor_vals_display), np.repeat(self.params['movement_std_threshold'], self.monitor_vals_display), 'r--')
-        self.window = 'Interface'
-        self.status = 'Status'
-        self.controls = 'Controls'
-        self.params_win = 'Parameters'
+        self.window = 'Camera'
+        self.control = 'Status'
         cv2.namedWindow(self.window, cv.CV_WINDOW_NORMAL)
-        cv2.namedWindow(self.status, cv.CV_WINDOW_NORMAL)
-        cv2.namedWindow(self.controls, cv.CV_WINDOW_NORMAL)
-        cv2.namedWindow(self.params_win, cv.CV_WINDOW_NORMAL)
+        cv2.namedWindow(self.control, cv.CV_WINDOW_AUTOSIZE)
         cv2.moveWindow(self.window, 0, 0)
-        cv2.moveWindow(self.status, 0, 600)
-        cv2.moveWindow(self.controls, 800, 0)
-        cv2.moveWindow(self.params_win, 800, 600)
-        self.disp_controls()
+        cv2.moveWindow(self.control, 600, 0)
+        self.controls = {'Pause':'p', 'Go':'g', 'Redo':'r', 'Quit':'q', 'Manual Trigger':'t'}
         for pn in self.param_names:
-            cv2.createTrackbar(pn,self.params_win,int(self.params[pn]), 100, self.update_trackbar_params)
+            cv2.createTrackbar(pn,self.control,int(self.params[pn]), 100, self.update_trackbar_params)
         self.update_trackbar_params(self)
         
         # Set initial variables
         self.masks = {}
         self.mask_idxs = {}
+        self.mask_pts = {}
 
         # Run interactive init
         self.init(trials=n_trials)
     def update_trackbar_params(self, _):
         for param in self.param_names:
-            self.params[param] = cv2.getTrackbarPos(param,self.params_win)
+            self.params[param] = cv2.getTrackbarPos(param,self.control)
         self.params['wheel_translation'] -= 50
         self.params['eye_translation'] -= 50
         self.params['wheel_stretch'] /= 25.
         self.params['eye_stretch'] /= 25.
         self.plotline.set_ydata(np.repeat(self.params['movement_std_threshold'], self.monitor_vals_display))
-    def disp_controls(self):    
-        items = {}
-        items['Pause'] = 'p'
-        items['Continue (go)'] = 'g'
-        items['Redo trial'] = 'r'
-        items['Quit'] = 'q'
-        items['Manual Trigger'] = 't'
-        
+    def update_status(self):
+        order = ['Controls','Pause','Go','Redo','Manual Trigger','Quit','Status','Paused','Trials done','Since last','Last trigger','Eyelid Value','Frame Rate']
         lab_origin = 10
         val_origin = 120
         textsize = 0.4
         textheight = 25
-        img = np.ones((round(textheight*len(items)*1.1),170))*255
+        self.status_img = np.ones((round(textheight*len(order)*1.1),300))*255
 
-        for idx,item in enumerate(items):
-            cv2.putText(img,item+':', (lab_origin,textheight+idx*textheight), cv2.FONT_HERSHEY_SIMPLEX, textsize, (0,0,0)) 
-            cv2.putText(img,items[item], (val_origin,textheight+idx*textheight), cv2.FONT_HERSHEY_SIMPLEX, textsize, (0,0,0)) 
-    
-        cv2.imshow(self.controls, img)
-    def update_status(self):
-        items = {}
+        items = self.controls
+        items['Controls'] = ''
+        items['Status'] = ''
         items['Since last'] = round(pytime.time()-self.last_trial_off, 3)
         items['Trials done'] = self.trial_count
         items['Paused'] = self.TRIAL_PAUSE
         items['Last trigger'] = self.trigger_cycle.current.name
         if len(self.monitor_vals['EYE']):
-            items['Eyelid Value'] = self.monitor_vals['EYE'][-1]
+            items['Eyelid Value'] = round(self.monitor_vals['EYE'][-1],2)
         else:
             items['Eyelid Value'] = '(none yet)'
-        items['Frame Rate'] = self.inst_frame_rate
+        items['Frame Rate'] = round(self.inst_frame_rate)
 
         for item in items:
             items[item] = str(items[item])
-      
-        lab_origin = 10
-        val_origin = 120
-        textsize = 0.4
-        textheight = 25
-        self.status_img = np.ones((round(textheight*len(items)*1.1),300))*255
-        
-        for idx,item in enumerate(items):
+       
+        for idx,item in enumerate(order):
             cv2.putText(self.status_img,item+':', (lab_origin,textheight+idx*textheight), cv2.FONT_HERSHEY_SIMPLEX, textsize, (0,0,0)) 
             cv2.putText(self.status_img,items[item], (val_origin,textheight+idx*textheight), cv2.FONT_HERSHEY_SIMPLEX, textsize, (0,0,0)) 
     
-        cv2.imshow(self.status, self.status_img)
+        cv2.imshow(self.control, self.status_img)
     def init(self, trials):
-        self.name = pytime.strftime("%Y%m%d_%H%M%S")
+        if self.name == None:
+            self.name = pytime.strftime("%Y%m%d_%H%M%S")
+        if os.path.isdir(self.name):
+            i = 1
+            while os.path.isdir(self.name+'_%i'%i):
+                i += 1
+            self.name = self.name+'_%i'%i
         os.mkdir(self.name)
 
         # set up frame rate details
         self.last_timestamp = pytime.time()
-        self.inst_frame_rate = None
+        self.inst_frame_rate = 0
 
         # set up trial count
         self.trials_total = trials
@@ -151,9 +137,10 @@ class Experiment(object):
         # ask user for masks and set them
         if len(self.masks)==0:     
             self.set_masks()
+        self.save_masks()
         
         # setup containers for acquired data
-        self.monitor_img_set = np.empty((self.camera.resolution[1],self.camera.resolution[0],self.params['movement_query_frames']))
+        self.monitor_img_set = np.empty((self.camera.resolution[1],self.camera.resolution[0],self.movement_query_frames))
         self.monitor_img_set[:] = None
         self.monitor_vals = {m:np.empty(self.monitor_vals_display) for m in self.mask_names}
         for m in self.monitor_vals:
@@ -163,33 +150,25 @@ class Experiment(object):
         self.last_trial_off = pytime.time()
         self.frame_count = 0
         
-        # save metadata
-        dic = {}
-        dic['name'] = self.name
-        dic['initial_params'] = self.params
-        dic['camera'] = self.camera.metadata()
-        dic['daq'] = self.daq.metadata()
-        dic['trigger_cycle'] = self.trigger_cycle.metadata()
-        dic['resample'] = self.resample
-        f = open(os.path.join(self.name,"metadata.json"), 'w')
-        f.write("%s"%json.dumps(dic))
-        f.close()
-        
         self.update_status()
         # run some initial frames 
-        for i in range(self.params['movement_query_frames']):
+        for _ in range(self.movement_query_frames):
             self.next_frame()
     def update_framerate(self, timestamp):
         fr = 1/(timestamp - self.last_timestamp)
         self.inst_frame_rate = fr
         self.last_timestamp = timestamp
+    def save_masks(self):
+        np.save(os.path.join(self.name,'masks'), np.atleast_1d([self.masks]))
     def set_masks(self):
         for m in self.mask_names:
             frame, timestamp = self.camera.read()
             pl.figure()
             pl.title("Select mask: %s."%m)
             pl.imshow(frame, cmap=mpl_cm.Greys_r)
-            pts = pl.ginput(0)
+            pts = []
+            while not len(pts):
+                pts = pl.ginput(0)
             pl.close()
             path = mpl_path.Path(pts)
             mask = np.ones(np.shape(frame), dtype=bool)
@@ -197,6 +176,7 @@ class Experiment(object):
                 for cidx,pt in enumerate(row):
                     if path.contains_point([cidx, ridx]):
                         mask[ridx,cidx] = False
+            self.mask_pts[m] = np.array(pts, dtype=np.int32)
             self.masks[m] = mask
             self.mask_idxs[m] = np.where(mask==False)
     def end(self):
@@ -261,6 +241,7 @@ class Experiment(object):
         if not self.frame_count % self.resample:
             if not self.TRIAL_ON and not self.TRIAL_PAUSE:
                 self.monitor_frame(frame, masks=('WHEEL','EYE'))
+            cv2.polylines(frame, [self.mask_pts[m] for m in self.mask_names], 1, (255,255,255), thickness=2)
             cv2.imshow(self.window, frame)
     def send_trigger(self):
         self.daq.trigger(self.trigger_cycle.next)
@@ -276,9 +257,9 @@ class Experiment(object):
                 i += 1
             self.filename = os.path.join(self.name,'trial%i_redo%i.npz'%(self.trial_count,i))
         
-        self.writer = cv2.VideoWriter(self.filename+'.avi',0,self.camera.frame_rate,frameSize=self.camera.resolution,isColor=False)
+        self.writer = cv2.VideoWriter(self.filename+'.avi',0,self.inst_frame_rate,frameSize=self.camera.resolution,isColor=False)
         self.time = []
-        self.monitor_img_set = np.empty((self.camera.resolution[1],self.camera.resolution[0],self.params['movement_query_frames']))
+        self.monitor_img_set = np.empty((self.camera.resolution[1],self.camera.resolution[0],self.movement_query_frames))
         self.monitor_img_set[:] = None
         self.monitor_vals = {m:np.empty(self.monitor_vals_display) for m in self.mask_names}
         for m in self.monitor_vals:
