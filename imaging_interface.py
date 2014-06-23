@@ -18,7 +18,7 @@ from core.daq import DAQ, Trigger
 from core.cameras import Camera
 
 class Experiment(object):
-    def __init__(self, name=None, camera=None, daq=None, mask_names=('WHEEL','EYE'), movement_query_frames=10, movement_std_thresh=1.5, trigger_cycle=None, inter_trial_min=10.0, n_trials=-1, resample=1, monitor_vals_display=100):
+    def __init__(self, name=None, camera=None, daq=None, mask_names=('WHEEL','EYE'), movement_query_frames=10, movement_std_thresh=10, eyelid_thresh=0, trigger_cycle=None, inter_trial_min=12.0, n_trials=-1, resample=1, monitor_vals_display=100):
         self.name = name
         
         if type(camera) == Camera:
@@ -43,14 +43,15 @@ class Experiment(object):
         self.monitor_vals_display = monitor_vals_display
 
         # Set variable parameters
-        self.param_names = ['movement_std_threshold', 'inter_trial_min', 'wheel_translation','wheel_stretch','eye_translation','eye_stretch']
+        self.param_names = ['movement_std_threshold', 'eyelid_threshold', 'inter_trial_min', 'wheel_translation','wheel_stretch','eye_translation','eye_stretch']
         self.params = {}
         self.params['movement_std_threshold'] = movement_std_thresh
+        self.params['eyelid_threshold'] = eyelid_thresh
         self.params['inter_trial_min'] = inter_trial_min
         self.params['wheel_translation'] = 50
-        self.params['wheel_stretch'] = 25
-        self.params['eye_translation'] = 50
-        self.params['eye_stretch'] = 25
+        self.params['wheel_stretch'] = 200
+        self.params['eye_translation'] = 0
+        self.params['eye_stretch'] = 50
 
         # Setup interface
         pl.ion()
@@ -59,6 +60,7 @@ class Experiment(object):
         self.ax.set_ylim([-1, 255])
         self.plotdata = {m:self.ax.plot(np.arange(self.monitor_vals_display),np.zeros(self.monitor_vals_display), c)[0] for m,c in zip(self.mask_names,['r-','b-'])} 
         self.plotline, = self.ax.plot(np.arange(self.monitor_vals_display), np.repeat(self.params['movement_std_threshold'], self.monitor_vals_display), 'r--')
+        self.plotline2, = self.ax.plot(np.arange(self.monitor_vals_display), np.repeat(self.params['eyelid_threshold'], self.monitor_vals_display), 'b--')
         self.window = 'Camera'
         self.control = 'Status'
         cv2.namedWindow(self.window, cv.CV_WINDOW_NORMAL)
@@ -67,7 +69,7 @@ class Experiment(object):
         cv2.moveWindow(self.control, 600, 0)
         self.controls = {'Pause':'p', 'Go':'g', 'Redo':'r', 'Quit':'q', 'Manual Trigger':'t'}
         for pn in self.param_names:
-            cv2.createTrackbar(pn,self.control,int(self.params[pn]), 100, self.update_trackbar_params)
+            cv2.createTrackbar(pn,self.control,int(self.params[pn]), 200, self.update_trackbar_params)
         self.update_trackbar_params(self)
         
         # Set initial variables
@@ -81,10 +83,11 @@ class Experiment(object):
         for param in self.param_names:
             self.params[param] = cv2.getTrackbarPos(param,self.control)
         self.params['wheel_translation'] -= 50
-        self.params['eye_translation'] -= 50
+        self.params['eye_translation'] -= 100
         self.params['wheel_stretch'] /= 25.
         self.params['eye_stretch'] /= 25.
         self.plotline.set_ydata(np.repeat(self.params['movement_std_threshold'], self.monitor_vals_display))
+        self.plotline2.set_ydata(np.repeat(self.params['eyelid_threshold'], self.monitor_vals_display))
     def update_status(self):
         order = ['Controls','Pause','Go','Redo','Manual Trigger','Quit','Status','Paused','Trials done','Since last','Last trigger','Eyelid Value','Frame Rate']
         lab_origin = 10
@@ -101,7 +104,10 @@ class Experiment(object):
         items['Paused'] = self.TRIAL_PAUSE
         items['Last trigger'] = self.trigger_cycle.current.name
         if len(self.monitor_vals['EYE']):
-            items['Eyelid Value'] = round(self.monitor_vals['EYE'][-1],2)
+            if self.monitor_vals['EYE'][-1] > 255. or self.monitor_vals['EYE'][-1] <0.:
+                items['Eyelid Value'] = 'ERROR'
+            else:
+                items['Eyelid Value'] = round(self.monitor_vals['EYE'][-1],2)
         else:
             items['Eyelid Value'] = '(none yet)'
         items['Frame Rate'] = round(self.inst_frame_rate)
@@ -191,7 +197,7 @@ class Experiment(object):
     def query_for_trigger(self):
         if pytime.time()-self.last_trial_off < self.params['inter_trial_min']:
             return False
-        return self.monitor_vals['WHEEL'][-1] < self.params['movement_std_threshold']
+        return (self.monitor_vals['WHEEL'][-1] < self.params['movement_std_threshold']) and (self.monitor_vals['EYE'][-1] < self.params['eyelid_threshold'])
     def monitor_frame(self, frame, masks=('WHEEL', 'EYE'), show=True):
         if 'WHEEL' in masks:
             if None in self.monitor_img_set:
@@ -215,7 +221,11 @@ class Experiment(object):
     def update_analog_daq(self):
         if self.monitor_vals['EYE'][-1] != None:
             val = self.monitor_vals['EYE'][-1]
-            val = self.normalize(val, oldmin=0., oldmax=255. * self.params['eye_stretch'] + self.params['eye_translation'], newmin=self.analog_daq.minn, newmax=self.analog_daq.maxx)          
+            val = self.normalize(val, oldmin=0., oldmax=255., newmin=self.analog_daq.minn, newmax=self.analog_daq.maxx)       
+            if val < self.analog_daq.minn:
+                val = self.analog_daq.minn
+            if val > self.analog_daq.maxx:
+                val = self.analog_daq.maxx
             tr = Trigger(msg=val)
             self.analog_daq.trigger(tr)
     def normalize(self, val, oldmin, oldmax, newmin, newmax):
@@ -241,7 +251,7 @@ class Experiment(object):
         if not self.frame_count % self.resample:
             if not self.TRIAL_ON and not self.TRIAL_PAUSE:
                 self.monitor_frame(frame, masks=('WHEEL','EYE'))
-            cv2.polylines(frame, [self.mask_pts[m] for m in self.mask_names], 1, (255,255,255), thickness=2)
+            cv2.polylines(frame, [self.mask_pts[m] for m in self.mask_names], 1, (255,255,255), thickness=1)
             cv2.imshow(self.window, frame)
     def send_trigger(self):
         self.daq.trigger(self.trigger_cycle.next)
@@ -267,7 +277,7 @@ class Experiment(object):
     def end_trial(self):
         self.TRIAL_ON = False
         self.last_trial_off = pytime.time()
-        np.savez_compressed(self.filename+'.npz', time=self.time)         
+        np.savez_compressed(self.filename+'.npz', time=self.time, trigger_type=self.trigger_cycle.current.metadata())         
         self.writer.release()
         self.filename = None
     def step(self):
