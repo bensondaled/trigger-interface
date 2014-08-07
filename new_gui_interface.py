@@ -26,7 +26,7 @@ from core.cameras import Camera
 import wx
 import threading
 
-class MainFrame(wx.Frame):
+class InterfaceFrame(wx.Frame):
     def __init__(self, experiment, parent=None, title='Interface'):
         self.exp = experiment
 
@@ -57,12 +57,11 @@ class MainFrame(wx.Frame):
             st = self.exp.statuses[st]
             if not st.show:
                 continue
-            name = wx.StaticText(parent=self, label=st.name, style=wx.ALIGN_RIGHT)
+            name = wx.StaticText(parent=self, label=st.name, style=wx.ALIGN_LEFT)
             name.SetFont(self.FONT_STATUS_NAME)
-            val = wx.TextCtrl(parent=self, style=wx.ALIGN_LEFT)
-            val.SetValue(str(st.value))
+            val = wx.StaticText(parent=self, style=wx.ALIGN_LEFT)
+            val.SetLabel(str(st.value))
             val.SetFont(self.FONT_STATUS_VALUE)
-            val.SetEditable(False)
             self.statuses[st.short] = val
             sizer_status.Add(name, flag=wx.EXPAND, border=1)
             sizer_status.Add(val, flag=wx.EXPAND, border=1)
@@ -119,12 +118,6 @@ class MainFrame(wx.Frame):
         sizer_plot = wx.GridSizer(rows=1, cols=1)
         self.panel_plot = PlotPanel(parent=self)
         
-        plot_names = self.exp.variables['mask_names'].value
-        plot_colors = ['r','b']
-        plot_threshs = [self.exp.variables[i].value for i in self.exp.variables['mask_threshs'].value]
-        for c,m,th in zip(plot_colors, plot_names, plot_threshs):
-            self.panel_plot.new_plot(m, c=c)
-            self.panel_plot.new_line(m, th, c=c)
         sizer_plot.Add(self.panel_plot, flag=wx.EXPAND)
         sizer_main.Add(sizer_plot, flag=wx.EXPAND)
 
@@ -161,7 +154,7 @@ class MainFrame(wx.Frame):
         self.exp.step()
         # update statuses
         for s in self.exp.statuses:
-            self.statuses[s].SetValue(str(self.exp.statuses[s].value))
+            self.statuses[s].SetLabel(str(self.exp.statuses[s].value))
 
 class CameraPanel(wx.Panel):
     def __init__(self, cam, parent=None):
@@ -180,21 +173,7 @@ class CameraPanel(wx.Panel):
     def update_image(self, frame):
         self.img.CopyFromBuffer(cv2.cvtColor(frame,cv.CV_GRAY2BGR))
         self.Refresh()
-    def step(self, show=True):
-        exp = self.parent.exp
 
-        frame, time = self.cam.read()
-        cv2.polylines(frame, [exp.mask_pts[m] for m in exp.variables['mask_names'].value if m in exp.masks.keys()], 1, (255,255,255), thickness=2)
-
-        if show:
-            self.update_image(frame)
-
-        exp.frame_count += 1
-        if exp.RECORDING:
-            exp.writer.write(frame)
-            exp.time.append(time)
-        if exp.masks:
-            exp.monitor_frame(frame, masks=('WHEEL','EYE'))
         
 class PlotPanel(wx.Panel):
     def __init__(self, parent):
@@ -251,7 +230,7 @@ class Experiment(object):
 
         # setup interface
         self.app = wx.App(False)
-        self.interface = MainFrame(self)
+        self.interface = InterfaceFrame(self)
 
         # begin first session
         self.new_session()
@@ -271,7 +250,7 @@ class Experiment(object):
                 Variable(name='Wheel Stretch', short='wheel_s', default=1., maxx=50, user=True, dtype=float),
                 Variable(name='Display Resample', short='resample', default=1., user=True, style='box', dtype=float),
                 Variable(name='Movement Frame Buffer', short='move_frames', default=10, user=True, dtype=float),
-                Variable(name='Monitor Plot Size', short='mon_plot_size', default=40, user=True, dtype=float),
+                Variable(name='Monitor Plot Size', short='mon_plot_size', default=40, user=True, dtype=float, show=False),
                 Variable(name='# of Trials', short='n_trials', default=9999, user=True, style='box', dtype=int),
                 Variable(name='Name', short='name', default='noname', user=True, style='box', dtype=str),
                 Variable(name='Mask Names', short='mask_names', default=['WHEEL','EYE'], user=False, show=False, dtype=list),
@@ -360,6 +339,13 @@ class Experiment(object):
         if len(self.masks)==0:     
             self.set_masks()
         self.save_masks()
+
+        plot_names = self.variables['mask_names'].value
+        plot_colors = ['r','b']
+        plot_threshs = [self.variables[i].value for i in self.variables['mask_threshs'].value]
+        for c,m,th in zip(plot_colors, plot_names, plot_threshs):
+            self.interface.panel_plot.new_plot(m, c=c)
+            self.interface.panel_plot.new_line(m, th, c=c)
     def monitor_frame(self, frame, masks=('WHEEL', 'EYE')):
         if 'WHEEL' in masks:
             if None in self.monitor_img_set:
@@ -422,6 +408,19 @@ class Experiment(object):
         self.writer.release()
         self.filename = None
 
+    def next_frame(self, show=True):
+        frame, time = self.camera.read()
+        cv2.polylines(frame, [self.mask_pts[m] for m in self.variables['mask_names'].value if m in self.masks.keys()], 1, (255,255,255), thickness=2)
+
+        if show:
+            self.interface.panel_camera.update_image(frame)
+
+        self.frame_count += 1
+        if self.RECORDING:
+            exp.writer.write(frame)
+            exp.time.append(time)
+        if exp.masks:
+            exp.monitor_frame(frame, masks=('WHEEL','EYE'))
     def step(self):
 
         if self.RECORDING:

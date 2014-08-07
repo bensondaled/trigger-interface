@@ -15,13 +15,13 @@ from pylab import imshow as plimshow
 from pylab import ginput as plginput
 from pylab import savefig as plsavefig
 from pylab import close as plclose
+import matplotlib.cm as mpl_cm
 ion()
 
 #tkinter
 from tkFileDialog import askopenfilename, askdirectory
 import ttk
 import Tkinter as tk
-import matplotlib.cm as mpl_cm
 
 #opencv
 from cv2 import getRotationMatrix2D, warpAffine, namedWindow, VideoCapture, destroyAllWindows, cvtColor, GaussianBlur, VideoWriter, absdiff, threshold, THRESH_BINARY, Canny, findContours,  RETR_EXTERNAL, CHAIN_APPROX_TC89_L1, contourArea, circle, waitKey, resize
@@ -36,8 +36,11 @@ DIR = 0
 NAME = 1
 
 def ginput(n):
-    pts = plginput(n, timeout=-1)
-    pts = np.array(pts)
+    try:
+        pts = plginput(n, timeout=-1)
+        pts = np.array(pts)
+    except:
+        pts = np.array([])
     return pts
 def contour_center(c):
     return np.round(np.mean(c[:,0,:],axis=0)).astype(int)
@@ -79,7 +82,7 @@ class Analysis(object):
         tracking = np.load(os.path.join(self.trial_dir,'%s_tracking.npz'%self.trial_name))
         return tracking
     def get_selections(self):
-        sel = np.load(self.trial_dir+'/%s_selections.npz'%self.trial_name)
+        sel = np.load(os.path.join(self.trial_dir,'%s_selections.npz'%self.trial_name))
         return sel
     def get_background(self):
         bg = np.load(os.path.join(self.background_dir,'%s_background.npz'%self.background_name))
@@ -271,11 +274,12 @@ class MouseTracker(object):
         return (path_l, path_r, path_c, rooms_mask, paths_ignore, last_center)
     def load_background(self):
         try:
-            bg = np.load(self.background_dir+'/%s_background.npz'%self.background_name)
+            bg = np.load(os.path.join(self.background_dir,'%s_background.npz'%self.background_name))
             background = bg['computations']
             background_image = bg['image']
         except:
             #print "Acquiring background information..."
+            #print os.path.join(self.background_dir, self.background_name+'-cam0.avi')
             blmov = VideoCapture(os.path.join(self.background_dir, self.background_name+'-cam0.avi'))
             valid, background = self.get_frame(blmov, n=-1, blur=True)
             blmov.release()
@@ -284,7 +288,7 @@ class MouseTracker(object):
             valid, background_image = self.get_frame(blmov, n=-1, blur=False)
             blmov.release()
             
-            np.savez(self.background_dir+'/%s_background'%self.background_name, computations=background, image=background_image)
+            np.savez(os.path.join(self.background_dir,'%s_background'%self.background_name), computations=background, image=background_image)
         return background, background_image
     def get_frame(self, mov, n=1, skip=0, blur=True):
         for s in range(skip):
@@ -393,12 +397,11 @@ class MouseTracker(object):
         if save:
             writer.release()
         self.end()
-
-    
+   
 class MainFrame(object):
     def __init__(self, parent, options=[]):
         self.parent = parent
-        self.frame = ttk.Frame(self.parent)
+        self.frame = tk.Frame(self.parent)
         
         self.selection = None
         self.show = tk.IntVar()
@@ -412,7 +415,6 @@ class MainFrame(object):
         self.initUI(options)
     def initUI(self, options):
         self.parent.title('Select Mouse')
-        self.frame.pack(fill=tk.BOTH, expand=1)
 
         self.lb = tk.Listbox(self.frame, selectmode=tk.EXTENDED, exportselection=0)
         self.lb2 = tk.Listbox(self.frame, selectmode=tk.MULTIPLE, exportselection=0)
@@ -427,8 +429,8 @@ class MainFrame(object):
 
         self.show_widg = ttk.Checkbutton(self.frame, text='Show tracking', variable=self.show)
         self.save_widg = ttk.Checkbutton(self.frame, text='Save tracking video', variable=self.save)
-        self.resample_widg = ttk.Entry(self.frame, textvariable=self.resample)
-        self.diff_thresh_widg = ttk.Entry(self.frame, textvariable=self.diff_thresh)
+        self.resample_widg = tk.Entry(self.frame, textvariable=self.resample, state='normal')
+        self.diff_thresh_widg = tk.Entry(self.frame, textvariable=self.diff_thresh, state='normal')
         label1 = ttk.Label(self.frame, text='Resample:')
         label2 = ttk.Label(self.frame, text='Threshold:')
         b1 = tk.Radiobutton(self.frame, text='Baseline', variable=self.bltest, value=CONTROL)
@@ -438,16 +440,18 @@ class MainFrame(object):
         self.lb.grid(row=1, column=0)
         ttk.Label(self.frame, text="Attempt selections from:").grid(row=0, column=1)
         self.lb2.grid(row=1, column=1)
-        self.resample_widg.grid(row=2, column=1)
         label1.grid(row=2, column=0)
-        self.diff_thresh_widg.grid(row=3, column=1)
         label2.grid(row=3, column=0)
+        self.resample_widg.grid(row=2, column=1)
+        self.diff_thresh_widg.grid(row=3, column=1)
         self.save_widg.grid(row=4, column=1)
         self.show_widg.grid(row=4, column=0)
         ttk.Label(self.frame, text='Trial type:').grid(row=5,column=0)
         b1.grid(row=5,column=1)
         b2.grid(row=5,column=2)
         self.ok.grid(row=6)
+        
+        self.frame.pack(fill=tk.BOTH, expand=1)
 
     def done_select(self, val):
         idxs = map(int, self.lb.curselection())
@@ -457,11 +461,10 @@ class MainFrame(object):
         values2 = [self.lb2.get(idx) for idx in idxs2]
         self.selection2 = values2
 
-        self.frame.destroy()
-
         self.main()
     def main(self):
         self.parent.title('Status')
+        self.frame.destroy()
         self.frame = ttk.Frame(self.parent, takefocus=True)
         self.frame.pack(fill=tk.BOTH, expand=1)
         self.todo = tk.StringVar()
@@ -508,132 +511,23 @@ if __name__=='__main__':
            good.append(mousename)
         return good
     
+    root1 = tk.Tk()
+    data_dir = askdirectory(parent=root1, initialdir='C:\\Users\\andreag\\Desktop', mustexist=True, title='Select directory containing data folders.')
+    if not data_dir:
+        root1.destroy()
+        sys.exit(0)
+    root1.destroy()
+
     root = tk.Tk()
     root.geometry("400x400+200+100")
-    data_dir = askdirectory(parent=root, initialdir='/', mustexist=True, title='Select directory containing data folders.')
-    if not data_dir:
-        sys.exit(0)
+    
     options = [o for o in os.listdir(data_dir) if os.path.isdir(os.path.join(data_dir,o))]
     options = parse_mice_names(options)
-
+    
     frame = MainFrame(root, options=options)
     root.mainloop()
+    
+    #if tk version not working, one solution is to ditch gui and run manually:
+    #mt = MouseTracker(mouse='mouse1', mode=0, data_directory='C:\\Users\\andreag\\Desktop\\chamber_examples\\', resample=9, diff_thresh=80, selection_from=[])
+    #mt.run(show=True, save=False)
    
-def analysis1(mice, datadir, sigma=1.5, norm=True, show_perc=True):
-    from scipy.ndimage.filters import gaussian_filter as gf
-    import pylab as pl
-
-    results = []
-
-    BASELINE = 0
-    TEST = 1
-
-    IMG = 0
-    HEAT = 1
-
-    for mode in [BASELINE, TEST]:
-        heats = []
-        pics = []
-
-        for mouse in mice:
-            a = Analysis(mouse, mode, data_directory=datadir)
-            bg = a.get_background()['image']
-            tr = a.get_tracking()
-            heat = tr['heat']
-            
-            t = np.array(a.get_time())
-            tdiff = t[1:] - t[:-1]
-            assert np.std(tdiff) < 0.01
-            Ts = np.mean(tdiff)
-            resamp = tr['params'][np.where(tr['params_key']=='resample')]
-            spf = Ts*resamp
-            
-            heat *= spf
-            if norm:
-                heat = heat/np.sum(heat)
-            
-            bg = a.crop(bg)
-            heat = a.crop(heat)
-            
-            heats.append(heat)
-            pics.append(bg)
-
-        minheight, minwidth = min([np.shape(h)[0] for h in heats]), min([np.shape(h)[1] for h in heats])
-        for idx,h in enumerate(heats):
-            heats[idx] = resize(h, (minwidth,minheight))
-            pics[idx] = resize(pics[idx], (minwidth,minheight))
-
-        heat = np.dstack(heats)
-        img = np.dstack(pics)
-        img = np.mean(img, axis=2)
-        avg = np.mean(heat, axis=2)
-        heat = gf(avg,sigma)
-        heat = heat/np.max(heat)
-        results.append([img,heat])
-
-    #pl.figure()
-    toshow = results[BASELINE][IMG]
-    #pl.imshow(toshow, cmap=mpl_cm.Greys_r)
-    toshow = results[BASELINE][HEAT]
-    if show_perc:
-        toshow = np.ma.masked_where(toshow<np.percentile(toshow,50),toshow)
-    #pl.imshow(toshow , cmap=mpl_cm.jet)
-    #pl.imshow(results[0][1])
-    #pl.figure()
-    toshow = results[TEST][IMG]
-    #pl.imshow(toshow, cmap=mpl_cm.Greys_r)
-    toshow = results[TEST][HEAT]
-    if show_perc:
-        toshow = np.ma.masked_where(toshow<np.percentile(toshow,70),toshow)
-    #pl.imshow(toshow , cmap=mpl_cm.jet)
-    #pl.imshow(results[1][1])
-
-    return results
-
-
-
-def analysis2(mice, datadir):
-    from csv import DictWriter as DW
-
-    results = DW(open('/Users/Benson/Desktop/times.csv','w'), fieldnames=['Mouse','trial-type','left\%','right\%','middle\%','left', "right",'middle','entries_left','entries_right','entries_middle','total_roomtime', 'total_trialtime'])
-    results.writeheader()
-
-    for mouse in mice:
-        for mode in [0,1]:
-            a = Analysis(mouse, mode, data_directory=datadir)
-            tr = a.get_tracking()
-            time = np.array(a.get_time())
-            nframes = tr['n_frames']
-            left = tr['left']+tr['left_assumed']
-            right = tr['right']+tr['right_assumed']
-            middle = tr['middle']+tr['middle_assumed']
-            resample = tr['params'][np.where(tr['params_key']=='resample')]
-            Ts = np.mean(time[1:]-time[:-1])
-            newTs = float(Ts * resample)
-            dic = {}
-            left = float(left)
-            right = float(right)
-            middle=float(middle)
-            total = (left+right+middle)*newTs
-            dic['Mouse'] = mouse
-            dic['trial-type'] = ['baseline','test'][mode]
-            dic['left'] = left*newTs
-            dic['right'] = right*newTs
-            dic['middle'] = middle*newTs
-            dic['total_roomtime'] = total
-            dic['left\%'] = left*newTs/total*100.
-            dic['right\%'] = right*newTs/total*100.
-            dic['middle\%'] = middle*newTs/total*100.
-            dic['total_trialtime'] = nframes*newTs
-
-            sel = a.get_selections()
-            cen = tr['centers']
-            path_l, path_r, path_c = [mpl_path.Path(pts) for pts in [sel['pts_l'],sel['pts_r'],sel['pts_c']]]
-            cen_str = ''.join([['l','m','r','x'][[path_l.contains_point(c),path_c.contains_point(c),path_r.contains_point(c), True].index(True)] for c in cen])
-            cen_str = cen_str.replace('x','')
-            dic['entries_left'] = len([m.start() for m in re.finditer('ml', cen_str)]) + int(cen_str[0]=='l')
-            dic['entries_right'] = len([m.start() for m in re.finditer('mr', cen_str)]) + int(cen_str[0]=='r')
-            dic['entries_middle'] = len([m.start() for m in re.finditer('lm', cen_str)]) + len([m.start() for m in re.finditer('rm',cen_str)])
-
-            results.writerow(dic)
-
