@@ -1,4 +1,4 @@
-exp_interface
-=============
+trigger-interface
+=================
 
-Interface for data acquisition, triggers, and monitoring with in-vivo 2-photon fluorescence microscopy
+This project contains the scripts used to run trigger-related experiments (ex. eyeblink conditioning) in the 1 or 2 photon setups.
