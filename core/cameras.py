@@ -6,20 +6,24 @@ import time
 import pylab as pl
 import json
 import sys
+try:
+    import flycapture2 as fc2
+except:
+    fc2 = None
 
 class Camera(object):
     BW = 0
     COLOR = 1
-    def __init__(self, idx=0, resolution=(320,240), frame_rate=50, color_mode=BW):
+    def __init__(self, idx=0, resolution=(320,240), frame_rate=50, color_mode=BW, cam_type='pseye'):
         self.resolution = resolution
         self.frame_rate = frame_rate
         self.color_mode = color_mode
+        self.cam_type = cam_type
 
         try:
             self.vc = cv2.VideoCapture(idx)
         except:
             raise Exception('Video capture from camera failed to initialize.')
-            sys.exit(1)
 
         self.vc.set(cv.CV_CAP_PROP_FPS, self.frame_rate)
         self.vc.set(cv.CV_CAP_PROP_FRAME_WIDTH, self.resolution[0])

@@ -6,3 +6,5 @@ chose 32 b/c pythonxy only comes that way
 --but imported with dll error
 then changed env variable "Path" to include all directories with dll files or object files in the flycapture api folders (in program files x86)
 --all worked from here
+
+edited flycapture2.pyx to add functions
