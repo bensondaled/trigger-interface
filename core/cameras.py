@@ -14,14 +14,14 @@ except:
 class fcVideoCapture(object):
     def __init__(self):
         self.c = fc2.Context()
-        self.c.connect(*c.get_camera_from_index(0))
+        self.c.connect(*self.c.get_camera_from_index(0))
         self.c.set_timestamping(True)
         self.c.start_capture()
         self.img = fc2.Image()
-        c.retrieve_buffer(self.img)
+        self.c.retrieve_buffer(self.img)
         self.first_ts = self.img.get_timestamp()
     def read(self):
-        c.retrieve_buffer(self.img)
+        self.c.retrieve_buffer(self.img)
         im = np.array(self.img)
         ts = self.img.get_timestamp()
         ts = self.diff(self.first_ts,ts)
@@ -66,7 +66,7 @@ class Camera(object):
         elif self.cam_type == self.PG:
             frame, timestamp = self.vc.read()
             timestamp = (time.time(), timestamp)
-        if self.color_mode==self.BW:
+        if self.color_mode==self.BW and self.cam_type==self.PSEYE:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         return (frame.astype(np.uint8), timestamp)
     def release(self):
