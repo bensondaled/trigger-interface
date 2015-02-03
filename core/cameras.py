@@ -6,6 +6,7 @@ import time
 import pylab as pl
 import json
 import sys
+from threading import Thread
 try:
     import flycapture2 as fc2
 except:
@@ -20,55 +21,89 @@ class fcVideoCapture(object):
         self.img = fc2.Image()
         self.c.retrieve_buffer(self.img)
         self.first_ts = self.img.get_timestamp()
+        self.start()
     def read(self):
-        self.c.retrieve_buffer(self.img)
-        im = np.array(self.img)
-        ts = self.img.get_timestamp()
-        ts = self.diff(self.first_ts,ts)
-        return (im, ts)
+        if self.available:
+            self.available = False
+            return self.current,self.currentts
+        else:
+            return None,None
     def diff(self, ts1, ts2):
         return (ts2['cycle_secs']-ts1['cycle_secs']) + (ts2['cycle_count']-ts1['cycle_count'])/8000.
     def release(self):
         self.c.stop_capture()
         self.c.disconnect()
+    def start(self):
+        Thread(target=self.continuous_read, args=()).start()
+        self.available = False
+        time.sleep(0.1)
+    def continuous_read(self):
+        while True:
+            im = None
+            while not np.any(im):
+                self.c.retrieve_buffer(self.img)
+                im = np.array(self.img)
+                ts = self.img.get_timestamp()
+                ts = self.diff(self.first_ts,ts)
+                ts = (ts,time.time())
+            self.current = im
+            self.currentts = ts
+            self.available = True
 
+        
+class psVideoCapture(object):
+    def __init__(self, idx, resolution, frame_rate):
+        self.vc = cv2.VideoCapture(idx)
+        self.vc.set(cv.CV_CAP_PROP_FPS, frame_rate)
+        self.vc.set(cv.CV_CAP_PROP_FRAME_WIDTH, resolution[0])
+        self.vc.set(cv.CV_CAP_PROP_FRAME_HEIGHT, resolution[1])
+        
+        self.start()
+    def read(self):
+        if self.available:
+            self.available = False
+            return self.current,self.currentts
+        else:
+            return None,None
+    def start(self):
+        Thread(target=self.continuous_read, args=()).start()
+        self.available = False
+        time.sleep(0.1)
+    def continuous_read(self):
+        while True:
+            val = False
+            while val == False:
+                val,fr = self.vc.read()
+            self.current = fr
+            self.currentts = time.time()
+            self.available = True
+    def release(self):
+        self.vc.release()
 class Camera(object):
     BW = 0
     COLOR = 1
     PSEYE = 0
     PG = 1
-    def __init__(self, idx=0, resolution=(320,240), frame_rate=50, color_mode=BW, cam_type=None):
+    def __init__(self, idx=0, resolution=(320,240), frame_rate=50, color_mode=BW, cam_type=PSEYE):
         self.resolution = resolution
         self.frame_rate = frame_rate
         self.color_mode = color_mode
         self.cam_type = cam_type
-        if cam_type == None:
-            self.cam_type = self.PSEYE
         
         if self.cam_type == self.PSEYE:
-            try:
-                self.vc = cv2.VideoCapture(idx)
-            except:
-                raise Exception('Video capture from camera failed to initialize.')
-
-            self.vc.set(cv.CV_CAP_PROP_FPS, self.frame_rate)
-            self.vc.set(cv.CV_CAP_PROP_FRAME_WIDTH, self.resolution[0])
-            self.vc.set(cv.CV_CAP_PROP_FRAME_HEIGHT, self.resolution[1])
-
-            time.sleep(0.1)
-            self.vc.read()
+            self.vc = psVideoCapture(idx, self.resolution, self.frame_rate)
         elif self.cam_type == self.PG:
             self.vc = fcVideoCapture()
+            
     def read(self):
-        if self.cam_type == self.PSEYE:
-            success,frame = self.vc.read()
-            timestamp = time.time()
-        elif self.cam_type == self.PG:
-            frame, timestamp = self.vc.read()
-            timestamp = (time.time(), timestamp)
-        if self.color_mode==self.BW and self.cam_type==self.PSEYE:
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        return (frame.astype(np.uint8), timestamp)
+        if self.vc.available:
+            frame,timestamp = self.vc.read()
+            if self.color_mode==self.BW and self.cam_type==self.PSEYE:
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            return (frame.astype(np.uint8), timestamp)
+        else:
+            return None,None
+
     def release(self):
         self.vc.release()
     def metadata(self):
