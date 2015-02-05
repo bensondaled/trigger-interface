@@ -36,7 +36,7 @@ class DAQ(object):
         if self.mode == self.ANALOG:
             self.port = port_analog
             self.minn = 0.0
-            self.maxx = 5.0
+            self.maxx = 10.0
         elif self.mode == self.DIGITAL:
             self.port = port_digital
         self.clear_trig = Trigger(msg=[0,0,0,0])

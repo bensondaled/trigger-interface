@@ -24,9 +24,8 @@ c = fc2.Context()
 #print c.get_num_of_cameras()
 c.connect(*c.get_camera_from_index(0))
 #print c.get_camera_info()
-sys.exit(0)
 
-#imset, packetsize, perc= c.get_format7_configuration()
+imset, packetsize, perc= c.get_format7_configuration()
 #c.set_format7_configuration(imset, 100.) #100 makes it the fastest
 #print imset
 
@@ -52,9 +51,9 @@ while True:
     c.retrieve_buffer(im)
     img = np.array(im)
     ts = im.get_timestamp()
-    cv2.imshow('a',img)
+    #cv2.imshow('a',img)
     print diff(last_ts,ts)
-    cv2.waitKey(1)
+    #cv2.waitKey(1)
     last_ts = ts
     #vw.write(img)
     

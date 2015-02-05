@@ -5,6 +5,11 @@ chose 32 b/c pythonxy only comes that way
 --this installed fine
 --but imported with dll error
 then changed env variable "Path" to include all directories with dll files or object files in the flycapture api folders (in program files x86)
---all worked from here
+(see path below)
+-all worked from here
 
 edited flycapture2.pyx to add functions
+
+
+
+added these to "Path" env variable on windows: C:\Program Files\Point Grey Research\FlyCapture2\lib64\C;C:\Program Files\Point Grey Research\FlyCapture2\include\C;C:\Program Files (x86)\Point Grey Research\FlyCapture2\bin;C:\Program Files (x86)\Point Grey Research\FlyCapture2\bin\FC1\;C:\Program Files (x86)\Point Grey Research\FlyCapture2\lib;C:\Program Files (x86)\Point Grey Research\FlyCapture2\lib\C;C:\Program Files (x86)\Point Grey Research\FlyCapture2\lib\FC1

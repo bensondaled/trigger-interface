@@ -21,6 +21,7 @@ class fcVideoCapture(object):
         self.img = fc2.Image()
         self.c.retrieve_buffer(self.img)
         self.first_ts = self.img.get_timestamp()
+        self.on = True
         self.start()
     def read(self):
         if self.available:
@@ -31,6 +32,8 @@ class fcVideoCapture(object):
     def diff(self, ts1, ts2):
         return (ts2['cycle_secs']-ts1['cycle_secs']) + (ts2['cycle_count']-ts1['cycle_count'])/8000.
     def release(self):
+        self.on = False
+        time.sleep(0.1)
         self.c.stop_capture()
         self.c.disconnect()
     def start(self):
@@ -39,6 +42,8 @@ class fcVideoCapture(object):
         time.sleep(0.1)
     def continuous_read(self):
         while True:
+            if not self.on:
+                break
             im = None
             while not np.any(im):
                 self.c.retrieve_buffer(self.img)

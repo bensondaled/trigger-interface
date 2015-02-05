@@ -16,10 +16,11 @@ from core.daq import DAQ, Trigger
 from core.cameras import Camera
 
 class Experiment(object):
-    def __init__(self, name=None, camera1=None, camera2=None, daq=None, data_dir='.', trial_duration=3., stim_delay=1.):
+    def __init__(self, name=None, camera1=None, camera2=None, daq=None, trigger=None, data_dir='.', trial_duration=3., stim_delay=1.):
         self.name = name
         self.data_dir = data_dir
         self.make_exp_dir()
+        self.trig = trigger
         
         if type(camera1) == Camera:
             self.camera1 = camera1
@@ -36,7 +37,7 @@ class Experiment(object):
         if type(daq) == DAQ:
             self.daq = daq
         elif daq==None:
-            self.daq = DAQ(mode=DAQ.DIGITAL)
+            self.daq = DAQ(mode=DAQ.DIGITAL, port_digital="Dev1/Port0/Line1")
         else:
             raise Exception('No valid DAQ supplied.')
 
@@ -48,6 +49,8 @@ class Experiment(object):
         self.PAUSED = False
         self.time1,self.time2,self.trigtime = [],[],None
         self.trial_n = 0
+        self.frame1 = np.zeros(self.camera1.resolution)
+        self.frame2 = np.zeros(self.camera2.resolution)
     def make_exp_dir(self):
         if self.name == None:
             self.name = pytime.strftime("%Y%m%d_%H%M%S")
@@ -69,7 +72,8 @@ class Experiment(object):
             self.new2 = True
     def send_trigger(self):
         self.trigtime = pytime.time()
-        self.daq.trigger(None)
+        self.daq.trigger(self.trig)
+        self.trigger_sent = True
     def save_current(self):
         if self.new1:
             self.writer1.write(self.frame1)
@@ -90,6 +94,7 @@ class Experiment(object):
         self.make_writers()
         self.time1,self.time2,self.trigtime = [],[],None
         self.save_start = pytime.time()
+        self.trigger_sent = False
         self.SAVING = True
     def end_trial(self):
         np.savez(pjoin(self.save_dir,self.trial_name+'timestamps'), time1=self.time1, time2=self.time2, trigger=self.trigtime)
@@ -98,7 +103,7 @@ class Experiment(object):
         self.SAVING = False
     def query_trial(self):
         elapsed = pytime.time()-self.save_start
-        if elapsed > self.stim_delay:
+        if elapsed > self.stim_delay and not self.trigger_sent:
             self.send_trigger()
         if elapsed > self.trial_duration:
             self.end_trial()
