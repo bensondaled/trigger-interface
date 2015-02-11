@@ -150,7 +150,7 @@ class Experiment(object):
         cv2.namedWindow('Camera1')
         cv2.namedWindow('Camera2')
         cv2.moveWindow('Camera1', 5,5)
-        cv2.moveWindow('Camera2', 5+self.camera1.resolution[0],5)
+        cv2.moveWindow('Camera2', 10+self.camera1.resolution[0],5)
         cont = True
         while cont:
             cont = self.step()
