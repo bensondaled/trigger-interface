@@ -8,9 +8,11 @@ name = ''
 while name == '':
     name = raw_input('Enter experiment name:')
 cam1 = Camera(cam_type=Camera.PG, resolution=(688,504))
-cam2 = Camera(idx=1, resolution=(320,240), frame_rate=100, color_mode=Camera.COLOR)
+cam2 = Camera(idx=1, resolution=(320,240), frame_rate=85, color_mode=Camera.COLOR)
 
-trig = Trigger(msg=[1,1,1,1], duration=1.0, name='basic')
+trig = Trigger(msg=[1,1,1,1], name='basic')
+trial_duration = 3.0 #seconds
+trigger_delay = 1.0 #seconds
 
-exp = Experiment(name=name, camera1=cam1, camera2=cam2, data_dir=data_dir, trigger=trig)
-exp.run() #'q' can always be used to end the run early. don't kill the process
+exp = Experiment(name=name, camera1=cam1, camera2=cam2, data_dir=data_dir, trigger=trig, trial_duration=trial_duration, stim_delay=trigger_delay)
+exp.run() #'q' is used to end. Do not kill process.
