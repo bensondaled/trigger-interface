@@ -14,6 +14,7 @@ cv = cv2.cv
 #custom
 from core.daq import DAQ, Trigger
 from core.cameras import Camera
+from threading import Thread
 
 class Experiment(object):
     def __init__(self, name=None, camera1=None, camera2=None, daq=None, trigger=None, data_dir='.', trial_duration=3., stim_delay=1.):
@@ -74,6 +75,23 @@ class Experiment(object):
         self.trigtime = pytime.time()
         self.daq.trigger(self.trig)
         self.trigger_sent = True
+    def thread_trigger(self):
+        while True:
+            if pytime.time()-self.save_start >= self.stim_delay and not self.trigger_sent:
+                self.send_trigger()
+                break
+    def thread_save_cam1(self):
+        while self.SAVING:
+            frame1, timestamp1 = self.camera1.read()
+            if frame1!=None:
+                self.writer1.write(frame1)
+                self.time1.append(timestamp1)
+    def thread_save_cam2(self):
+        while self.SAVING:
+            frame2, timestamp2 = self.camera2.read()
+            if frame2!=None:
+                self.writer2.write(frame2)
+                self.time2.append(timestamp2)
     def save_current(self):
         if self.new1:
             self.writer1.write(self.frame1)
@@ -87,7 +105,7 @@ class Experiment(object):
         wname1 = pjoin(self.save_dir,self.trial_name + 'cam1.avi')
         wname2 = pjoin(self.save_dir,self.trial_name + 'cam2.avi')
         self.writer1 = cv2.VideoWriter(wname1,0,30,frameSize=self.camera1.resolution,isColor=False)
-        self.writer2 = cv2.VideoWriter(wname2,0,30,frameSize=self.camera2.resolution,isColor=False)
+        self.writer2 = cv2.VideoWriter(wname2,0,30,frameSize=self.camera2.resolution,isColor=self.camera2.color_mode)
     def start_trial(self):
         self.trial_n += 1
         self.trial_name = pjoin(self.name+'_%02d_'%self.trial_n)
@@ -96,6 +114,10 @@ class Experiment(object):
         self.save_start = pytime.time()
         self.trigger_sent = False
         self.SAVING = True
+        pytime.sleep(0.025)
+        Thread(target=self.thread_save_cam1).start()
+        Thread(target=self.thread_save_cam2).start()
+        Thread(target=self.thread_trigger).start()
     def end_trial(self):
         np.savez(pjoin(self.save_dir,self.trial_name+'timestamps'), time1=self.time1, time2=self.time2, trigger=self.trigtime)
         self.writer1.release()
@@ -103,18 +125,15 @@ class Experiment(object):
         self.SAVING = False
     def query_trial(self):
         elapsed = pytime.time()-self.save_start
-        if elapsed > self.stim_delay and not self.trigger_sent:
-            self.send_trigger()
         if elapsed > self.trial_duration:
             self.end_trial()
     def step(self):
-        self.next_frame()
-        
         if self.SAVING:
-            self.save_current()
+            #self.save_current()
             self.query_trial()
         
         elif not self.SAVING:
+            self.next_frame()
             c = cv2.waitKey(1)
             if not self.PAUSED:
                 cv2.imshow('Camera1',self.frame1)

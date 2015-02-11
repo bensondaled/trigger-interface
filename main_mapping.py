@@ -7,8 +7,8 @@ data_dir = os.path.join('.','data')
 name = ''
 while name == '':
     name = raw_input('Enter experiment name:')
-cam1 = Camera(cam_type=Camera.PG, resolution=(1280,960))
-cam2 = Camera(idx=1, resolution=(320,240), frame_rate=40, color_mode=Camera.BW)
+cam1 = Camera(cam_type=Camera.PG, resolution=(688,504))
+cam2 = Camera(idx=1, resolution=(320,240), frame_rate=100, color_mode=Camera.COLOR)
 
 trig = Trigger(msg=[1,1,1,1], duration=1.0, name='basic')
 
