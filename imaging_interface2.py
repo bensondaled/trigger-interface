@@ -44,7 +44,6 @@ class Experiment(object):
 
         self.trial_duration = trial_duration
         self.stim_delay = stim_delay
-        cv2.namedWindow('Camera')
         
         self.SAVING = False
         self.PAUSED = False
@@ -62,6 +61,9 @@ class Experiment(object):
             self.name = self.name+'_%i'%i
         os.mkdir(pjoin(self.data_dir,self.name))
         self.save_dir = pjoin(self.data_dir,self.name)
+        self.log_file = open(pjoin(self.save_dir,self.name+'.log'),'a')
+    def log(self, msg):
+        print >> self.log_file, '%0.9f %s' %(pytime.time(),msg)
     def next_frame(self):
         frame1, timestamp1 = self.camera1.read()
         if frame1!=None:
@@ -75,6 +77,7 @@ class Experiment(object):
         self.trigtime = pytime.time()
         self.daq.trigger(self.trig)
         self.trigger_sent = True
+        self.log('sent trigger')
     def thread_trigger(self):
         while True:
             if pytime.time()-self.save_start >= self.stim_delay and not self.trigger_sent:
@@ -86,12 +89,14 @@ class Experiment(object):
             if frame1!=None:
                 self.writer1.write(frame1)
                 self.time1.append(timestamp1)
+        self.writer1.release()
     def thread_save_cam2(self):
         while self.SAVING:
             frame2, timestamp2 = self.camera2.read()
             if frame2!=None:
                 self.writer2.write(frame2)
                 self.time2.append(timestamp2)
+        self.writer2.release()
     def save_current(self):
         if self.new1:
             self.writer1.write(self.frame1)
@@ -118,11 +123,12 @@ class Experiment(object):
         Thread(target=self.thread_save_cam1).start()
         Thread(target=self.thread_save_cam2).start()
         Thread(target=self.thread_trigger).start()
+        self.log('trial started')
     def end_trial(self):
         np.savez(pjoin(self.save_dir,self.trial_name+'timestamps'), time1=self.time1, time2=self.time2, trigger=self.trigtime)
-        self.writer1.release()
-        self.writer2.release()
         self.SAVING = False
+        self.log('trial ended')
+        pytime.sleep(0.030)
     def query_trial(self):
         elapsed = pytime.time()-self.save_start
         if elapsed > self.trial_duration:
@@ -147,20 +153,23 @@ class Experiment(object):
             
         return True
     def run(self):
+        self.log('started run')
         cv2.namedWindow('Camera1')
         cv2.namedWindow('Camera2')
         cv2.moveWindow('Camera1', 5,5)
-        cv2.moveWindow('Camera2', 10+self.camera1.resolution[0],5)
+        cv2.moveWindow('Camera2', 5,5)
         cont = True
         while cont:
             cont = self.step()
         self.end()
         print "Experiment ended."
     def end(self):
+        self.log('quit')
         cv2.destroyAllWindows()
         self.camera1.release()
         self.camera2.release()
         self.daq.release()
+        self.log_file.close()
 
 if __name__=='__main__':
     pass
