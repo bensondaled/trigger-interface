@@ -104,7 +104,7 @@ class Experiment(object):
             if frame3!=None:
                 self.frame3,self.timestamp3 = frame3,timestamp3
                 self.new3 = True
-    def resize(self,frame,width=430):
+    def resize(self,frame,width=860):
         fsize = frame.shape
         if len(fsize)>2:
             fsize = fsize[:len(fsize)-1]
@@ -227,10 +227,10 @@ class Experiment(object):
             cv2.moveWindow('Camera1', 5,5)
         if self.camera2:
             cv2.namedWindow('Camera2')
-            cv2.moveWindow('Camera2', 5+430+20,5)
+            cv2.moveWindow('Camera2', 5+860+20,5)
         if self.camera3:
             cv2.namedWindow('Camera3')
-            cv2.moveWindow('Camera3', 5+430*2+40,5)
+            cv2.moveWindow('Camera3', 5+(860+430)*2+40,5)
     def run(self):
         self.log('started run')
         self.place_windows()
