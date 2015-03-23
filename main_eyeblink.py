@@ -1,6 +1,6 @@
 from core.cameras import Camera
 from core.daq import Trigger
-from imaging_interface import Experiment, TriggerCycle
+from interface_eyeblink import Experiment, TriggerCycle
 
 #name = 'AG052014-02/062214_-191 -226 72_WHISK_COND_'
 name = 'AG051514-01/062214_-34 490 193_EXT_A_'

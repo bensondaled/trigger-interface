@@ -61,6 +61,7 @@ class Experiment(object):
             self.frame2 = np.zeros(self.camera2.resolution)
         if self.camera3:
             self.frame3 = np.zeros(self.camera3.resolution)
+        self.save_metadata()
     def make_exp_dir(self):
         if self.name == None:
             self.name = pytime.strftime("%Y%m%d_%H%M%S")
@@ -74,6 +75,17 @@ class Experiment(object):
         self.save_dir = pjoin(self.data_dir,self.name)
         self.log_file = open(pjoin(self.save_dir,self.name+'.log'),'a')
         self.trial_n = 0
+    def save_metadata(self):
+        metadata = dict(name=self.name, data_dir=self.data_dir, trial_duration = self.trial_duration, stim_delay=self.stim_delay, save_dir=self.save_dir)
+        metadata['trigger_md'] = self.trig.metadata()
+        if self.camera1:
+            metadata['camera1_md'] = self.camera1.metadata()
+        if self.camera2:
+            metadata['camera2_md'] = self.camera2.metadata()
+        if self.camera3:
+            metadata['camera3_md'] = self.camera3.metadata()
+        with open(pjoin(self.save_dir,self.name+'_metadata.json'),'w') as f:
+            f.write('%s'%json.dumps(metadata))
     def change_name(self):
         oldname = self.name
         newname = ''
@@ -83,8 +95,9 @@ class Experiment(object):
         self.log_file.close()
         self.name = newname
         self.make_exp_dir()
+        self.save_metadata()
         print "Name changed."
-        self.log('name changed from %s to %s'%(oldname,newname))
+        self.log('name changed from %s to %s (adjusted to %s)'%(oldname,newname,self.name))
     def log(self, msg):
         print >> self.log_file, '%0.9f %s' %(pytime.time(),msg)
         self.log_file.flush()
@@ -172,11 +185,11 @@ class Experiment(object):
         Thread(target=self.thread_save_cam2).start()
         Thread(target=self.thread_save_cam3).start()
         Thread(target=self.thread_trigger).start()
-        self.log('trial started')
+        self.log('trial %i started'%self.trial_n)
     def end_trial(self):
         np.savez(pjoin(self.save_dir,self.trial_name+'timestamps'), time1=self.time1, time2=self.time2, time3=self.time3, trigger=self.trigtime)
         self.SAVING = False
-        self.log('trial ended')
+        self.log('trial %i ended'%self.trial_n)
         pytime.sleep(0.030)
     def query_trial(self):
         elapsed = pytime.time()-self.save_start
@@ -190,8 +203,9 @@ class Experiment(object):
             self.next_frame()
             c = cv2.waitKey(1)
             if not self.PAUSED:
-                cv2.imshow('Camera1',self.resize(self.frame1))
-                cv2.imshow('Camera2',self.resize(self.frame2))
+                cv2.imshow('Camera1',self.resize(self.frame1, width=860))
+                cv2.imshow('Camera2',self.resize(self.frame2, width=320))
+                cv2.imshow('Camera3',self.resize(self.frame3, width=320))
             if c == ord('p'):
                 self.PAUSED = not self.PAUSED
             elif c == ord('t'):
@@ -227,10 +241,10 @@ class Experiment(object):
             cv2.moveWindow('Camera1', 5,5)
         if self.camera2:
             cv2.namedWindow('Camera2')
-            cv2.moveWindow('Camera2', 5+860+20,5)
+            cv2.moveWindow('Camera2', 600,5)
         if self.camera3:
             cv2.namedWindow('Camera3')
-            cv2.moveWindow('Camera3', 5+(860+430)*2+40,5)
+            cv2.moveWindow('Camera3', 600,300)
     def run(self):
         self.log('started run')
         self.place_windows()

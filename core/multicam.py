@@ -27,11 +27,8 @@ CLEYE_LENSCORRECTION3 = 18#[-500, 500]
 CLEYE_LENSBRIGHTNESS = 19#[-500, 500]
 
 #CLEyeCameraColorMode
-CLEYE_MONO_PROCESSED = 0
-CLEYE_COLOR_PROCESSED = 1
-CLEYE_MONO_RAW = 2
-CLEYE_COLOR_RAW = 3
-CLEYE_BAYER_RAW = 4
+CLEYE_GREYSCALE = 0
+CLEYE_COLOR = 1
 
 #CLEyeCameraResolution
 CLEYE_QVGA = 0
@@ -90,8 +87,9 @@ def CLEyeCameraGetFrame(cam, frame, timeout):
 class Ps3Eye():
     def __init__(self, index, color_mode, resolution_mode, fps):
         self.cam = CLEyeCreateCamera(CLEyeGetCameraUUID(index), color_mode, resolution_mode, fps)
-        self.bytes_per_pixel = 1
-        if color_mode not in (CLEYE_MONO_PROCESSED, CLEYE_MONO_RAW):
+        if color_mode == CLEYE_GREYSCALE:
+            self.bytes_per_pixel = 1
+        elif color_mode == CLEYE_COLOR:
             self.bytes_per_pixel = 4
         self.x, self.y = CLEyeCameraGetFrameDimensions(self.cam)
         
@@ -105,7 +103,7 @@ class Ps3Eye():
     def stop(self):
         return CLEyeCameraStop(self.cam)
         
-    def get_frame(self, buffer=None, timeout=1):
+    def get_frame(self, buffer=None, timeout=200):
         buffer = buffer or ctypes.create_string_buffer(self.x * self.y * self.bytes_per_pixel) 
         got=CLEyeCameraGetFrame(self.cam, buffer, timeout)
         return (got,buffer)
@@ -124,7 +122,7 @@ def test_Ps3Eye():
     eye.configure(settings)
     eye.start()
   
-    frame = eye.get_frame()
+    valid,frame = eye.get_frame()
     frame = numpy.fromstring(frame, numpy.dtype('uint8')).reshape(eye.y, eye.x)
     im = plt.imshow(frame)
     plt.show()
@@ -182,5 +180,21 @@ def main():
 
 if __name__ == '__main__':
     #main()
-    pass
+    #pass
     #test_Ps3Eye()
+    eye = Ps3Eye(0, CLEYE_COLOR, CLEYE_QVGA, 75)  
+    settings = [ (CLEYE_AUTO_GAIN, 1), \
+                 (CLEYE_AUTO_EXPOSURE, 1),\
+                 (CLEYE_AUTO_WHITEBALANCE, 1)]
+    eye.configure(settings)
+    eye.start()
+    import cv2
+    import numpy as np
+    while True:
+        valid,frame = eye.get_frame()
+        frame = np.fromstring(frame, np.dtype('uint8'))
+        frame = frame.reshape(eye.y, eye.x, 4)
+        cv2.imshow('a',frame)
+        c=cv2.waitKey(1)
+        if c == ord('q'):
+            break
