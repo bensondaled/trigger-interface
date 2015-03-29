@@ -54,7 +54,7 @@ class fcVideoCapture(object):
                 im = np.array(self.img)
                 ts = self.img.get_timestamp()
                 ts = self.diff(self.first_ts,ts)
-                ts = (ts,time.time())
+                ts = (ts,time.time(),time.clock())
             self.current = im
             self.currentts = ts
             self.available = True
@@ -90,7 +90,7 @@ class psVideoCapture(object):
             while val == False:
                 val,fr = self.vc.read()
             self.current = fr
-            self.currentts = time.time()
+            self.currentts = (time.time(),time.clock())
             self.available = True
     def release(self):
         self.READING = False
@@ -147,7 +147,7 @@ class psVideoCaptureAPI(object):
             while not val:
                 val,fr = self.vc.get_frame()
             self.current = np.fromstring(fr, np.dtype('uint8')).reshape(newdims)
-            self.currentts = time.time()
+            self.currentts = (time.time(),time.clock())
             self.available = True
     def release(self):
         self.READING = False
