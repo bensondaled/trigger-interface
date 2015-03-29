@@ -126,7 +126,7 @@ class Experiment(object):
         frame = cv2.resize(frame, tuple(newshape))
         return frame
     def send_trigger(self):
-        self.trigtime = pytime.time()
+        self.trigtime = [pytime.time(),pytime.clock()]
         self.daq.trigger(self.trig)
         self.trigger_sent = True
         self.log('sent trigger')
