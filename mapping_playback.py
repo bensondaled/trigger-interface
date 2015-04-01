@@ -97,8 +97,10 @@ def play(name):
         mint = np.min([st[1] if len(st)==3 else st[0] for st in [t[0] for t in ts]])
         for vci,vc,t in zip(xrange(len(vcs)),vcs,ts):
             qtime = t[0]
-            if type(qtime) in [list,np.ndarray]:    
+            if len(qtime) == 3:    
                 qtime=qtime[1]
+            elif len(qtime) == 2:
+                qtime=qtime[0]
             if qtime>mint:
                 continue
             valid,frame = vc.read()
