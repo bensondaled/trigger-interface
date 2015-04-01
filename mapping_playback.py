@@ -60,7 +60,7 @@ def plot(name, n):
         t = np.load(fh.get_path(fh.n_trials-i,fh.TIME))
         ts = t['time1']
         ts = [i[1] if type(i) in [list,np.ndarray] else i for i in ts]
-        trigt = t['trigger'] - ts[0] + TRIG_DELAY
+        trigt = t['trigger'][0] - ts[0] + TRIG_DELAY
         ts = ts-ts[0]
         meanf = []
         for i in xrange(len(ts)):
@@ -94,11 +94,13 @@ def play(name):
     Ts = 20
     while True:
         anytrue = False
-        mint = np.min([st[1] if type(st) in [list,np.ndarray] else st for st in [t[0] for t in ts]])
+        mint = np.min([st[1] if len(st)==3 else st[0] for st in [t[0] for t in ts]])
         for vci,vc,t in zip(xrange(len(vcs)),vcs,ts):
             qtime = t[0]
-            if type(qtime) in [list,np.ndarray]:    
+            if len(qtime) == 3:    
                 qtime=qtime[1]
+            elif len(qtime) == 2:
+                qtime=qtime[0]
             if qtime>mint:
                 continue
             valid,frame = vc.read()

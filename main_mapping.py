@@ -26,8 +26,16 @@ cam1 = Camera(cam_type=Camera.PG, resolution=(1280,960)) #resolution for PG is n
 #cam2 = Camera(idx=1, cam_type=Camera.PSEYE, resolution=(320,240), frame_rate=85, color_mode=Camera.COLOR)
 #cam2 = Camera(idx=1-1, cam_type=Camera.PSEYE_NEW, resolution=(320,240), frame_rate=125, **pseye_params2)
 
-cam2 = Camera(idx=1-1, cam_type=Camera.PSEYE_NEW, resolution=(640,480), frame_rate=75, **pseye_params2)
-cam3 = Camera(idx=2-1, cam_type=Camera.PSEYE_NEW, resolution=(320,240), frame_rate=125, **pseye_params)
+#frontal view
+#cam2 = Camera(idx=1-1, cam_type=Camera.PSEYE_NEW, resolution=(640,480), frame_rate=75, **pseye_params2)
+#cam3 = Camera(idx=2-1, cam_type=Camera.PSEYE_NEW, resolution=(320,240), frame_rate=125, **pseye_params)
+#lateral view
+pseye_params['vflip']=False;
+pseye_params2['vflip']=True;
+
+cam2 = Camera(idx=1-1, cam_type=Camera.PSEYE_NEW, resolution=(320,240), frame_rate=125, **pseye_params)
+cam3 = Camera(idx=2-1, cam_type=Camera.PSEYE_NEW, resolution=(640,480), frame_rate=75, **pseye_params2)
+
 
 trig = Trigger(msg=[1,1,1,1], name='basic')
 trial_duration = 5.0 #seconds
