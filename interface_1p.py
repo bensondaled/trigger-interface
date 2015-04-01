@@ -187,8 +187,9 @@ class Experiment(object):
         Thread(target=self.thread_trigger).start()
         self.log('trial %i started'%self.trial_n)
     def end_trial(self):
-        np.savez(pjoin(self.save_dir,self.trial_name+'timestamps'), time1=self.time1, time2=self.time2, time3=self.time3, trigger=self.trigtime)
         self.SAVING = False
+        pytime.sleep(0.030)
+        np.savez(pjoin(self.save_dir,self.trial_name+'timestamps'), time1=self.time1, time2=self.time2, time3=self.time3, trigger=self.trigtime)
         self.log('trial %i ended'%self.trial_n)
         pytime.sleep(0.030)
     def query_trial(self):
