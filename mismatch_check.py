@@ -6,9 +6,10 @@ pjoin = os.path.join
 from mapping_playback import FileHandler
 
 if __name__ == '__main__':
-    data_dir = pjoin('.','data')
-    name = ''
+    name = raw_input('Drag session folder here: ').strip('"')
+    data_dir,name = os.path.split(name)
     fh = FileHandler(data_dir, name)
+    anyfalse = False
     for ti in xrange(1,fh.n_trials+1):
         ts = np.load(fh.get_path(ti, fh.TIME))
         nframes = []
@@ -19,6 +20,14 @@ if __name__ == '__main__':
             nts.append(ts['time%i'%ci].shape[0])
         nframes = np.array(nframes)
         nts = np.array(nts)
-        print np.all(nframes==nts)
+        if not np.all(nframes==nts):
+            anyfalse = True
+        print "Trial %i"%ti
+        print nframes-nts
+        print "Match = " + str(np.all(nframes==nts))
+        #print "More frames than stamps? " + str(np.all((nframes-nts)>=0))
+        print
+    print
+    print "Any mismatches: " + str(anyfalse)
 
     

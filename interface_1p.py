@@ -75,6 +75,7 @@ class Experiment(object):
         self.save_dir = pjoin(self.data_dir,self.name)
         self.log_file = open(pjoin(self.save_dir,self.name+'.log'),'a')
         self.trial_n = 0
+        self.save_end = pytime.time()
     def save_metadata(self):
         metadata = dict(name=self.name, data_dir=self.data_dir, trial_duration = self.trial_duration, stim_delay=self.stim_delay, save_dir=self.save_dir)
         metadata['trigger_md'] = self.trig.metadata()
@@ -117,13 +118,14 @@ class Experiment(object):
             if frame3!=None:
                 self.frame3,self.timestamp3 = frame3,timestamp3
                 self.new3 = True
-    def resize(self,frame,width=860):
+    def resize(self,frame,width=860,add_time=0.0):
         fsize = frame.shape
         if len(fsize)>2:
             fsize = fsize[:len(fsize)-1]
         rsf = frame.shape[1]/float(width)
         newshape = np.round(np.array(fsize)[::-1]/rsf).astype(int)
         frame = cv2.resize(frame, tuple(newshape))
+        cv2.putText(frame,'%0.4f'%(add_time),(5,30),0,1,(160,100,80))
         return frame
     def send_trigger(self):
         self.trigtime = [pytime.time(),pytime.clock()]
@@ -136,6 +138,7 @@ class Experiment(object):
                 self.send_trigger()
                 break
     def thread_save_cam1(self):
+        self.cam1_on = True
         if self.camera1 == None:
             return
         while self.SAVING:
@@ -144,7 +147,9 @@ class Experiment(object):
                 self.writer1.write(frame1)
                 self.time1.append(timestamp1)
         self.writer1.release()
+        self.cam1_on = False
     def thread_save_cam2(self):
+        self.cam2_on = True
         if self.camera2 == None:
             return
         while self.SAVING:
@@ -153,7 +158,9 @@ class Experiment(object):
                 self.writer2.write(frame2)
                 self.time2.append(timestamp2)
         self.writer2.release()
+        self.cam2_on = False
     def thread_save_cam3(self):
+        self.cam3_on = True
         if self.camera3 == None:
             return
         while self.SAVING:
@@ -162,6 +169,7 @@ class Experiment(object):
                 self.writer3.write(frame3)
                 self.time3.append(timestamp3)
         self.writer3.release()
+        self.cam3_on = False
     def make_writers(self):
         wname1 = pjoin(self.save_dir,self.trial_name + 'cam1.avi')
         wname2 = pjoin(self.save_dir,self.trial_name + 'cam2.avi')
@@ -188,10 +196,12 @@ class Experiment(object):
         self.log('trial %i started'%self.trial_n)
     def end_trial(self):
         self.SAVING = False
-        pytime.sleep(0.030)
+        while self.cam1_on or self.cam2_on or self.cam3_on:
+            pass
         np.savez(pjoin(self.save_dir,self.trial_name+'timestamps'), time1=self.time1, time2=self.time2, time3=self.time3, trigger=self.trigtime)
         self.log('trial %i ended'%self.trial_n)
         pytime.sleep(0.030)
+        self.save_end = pytime.time()
     def query_trial(self):
         elapsed = pytime.time()-self.save_start
         if elapsed > self.trial_duration:
@@ -203,10 +213,11 @@ class Experiment(object):
         elif not self.SAVING:
             self.next_frame()
             c = cv2.waitKey(1)
+            dt = pytime.time()-self.save_end
             if not self.PAUSED:
-                cv2.imshow('Camera1',self.resize(self.frame1, width=860))
-                cv2.imshow('Camera2',self.resize(self.frame2, width=320))
-                cv2.imshow('Camera3',self.resize(self.frame3, width=320))
+                cv2.imshow('Camera1',self.resize(self.frame1, width=860, add_time=dt))
+                cv2.imshow('Camera2',self.resize(self.frame2, width=320, add_time=dt))
+                cv2.imshow('Camera3',self.resize(self.frame3, width=320, add_time=dt))
             if c == ord('p'):
                 self.PAUSED = not self.PAUSED
             elif c == ord('t'):
