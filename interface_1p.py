@@ -185,10 +185,10 @@ class Experiment(object):
         self.trial_name = pjoin(self.name+'_%02d_'%self.trial_n)
         self.make_writers()
         self.time1,self.time2,self.time3,self.trigtime = [],[],[],None
+        pytime.sleep(0.025)
         self.save_start = pytime.time()
         self.trigger_sent = False
         self.SAVING = True
-        pytime.sleep(0.025)
         Thread(target=self.thread_save_cam1).start()
         Thread(target=self.thread_save_cam2).start()
         Thread(target=self.thread_save_cam3).start()
