@@ -1,3 +1,5 @@
+# TODO: turn off garbage collection when acquiring!
+
 #natives
 import json
 import os
