@@ -1,0 +1,4 @@
+TODO for next iter:
+
+-force garbage collection, and turn off auto?
+-remove both time.time and time.clock, use the newer non-deprecated reliable versions
